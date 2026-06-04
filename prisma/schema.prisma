@@ -1,0 +1,161 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+// ==========================================
+// 👤 USER MANAGEMENT & AUTHENTICATION
+// ==========================================
+model User {
+  id        String   @id @default(uuid())
+  status    UserStatus   @default(PENDING)
+  email     String   @unique
+  username  String   @unique
+  password  String   // Hashed password
+   
+  balance   Decimal  @default(0.00) @db.Decimal(10, 2) // Available wallet balance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  bets      Bet[]    // One-to-many: One user can place multiple bets
+}
+
+model Admin{
+  id String @id @default(uuid())
+  name String
+  email String @unique
+  username String @unique
+  password String
+  password2 String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// ==========================================
+// ⚽ WORLD CUP FIXTURES & MATCHES
+// ==========================================
+model Match {
+  id                  String      @id @default(uuid())
+  apiMatchId          Int         @unique // To map directly with API-Football IDs
+  homeTeam            String
+  awayTeam            String
+  kickoffTime         DateTime
+  stage               String      // e.g., "Group Stage", "Round of 16", "Final"
+  status              MatchStatus @default(UPCOMING)
+  homeScore           Int?        // Null until match starts/ends
+  awayScore           Int?
+  
+  // Automation flags for your 10-minute cron check
+  preMatchSynced      Boolean     @default(false)
+  postMatchSettled    Boolean     @default(false)
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+addedtoBetting  Boolean     @default(false)
+  markets             Market[]    // One-to-many: One match has multiple betting markets
+}
+
+enum MatchStatus {
+  UPCOMING
+  LIVE
+  FINISHED
+  CANCELLED
+}
+
+// ==========================================
+// 📊 BETTING MARKETS & ODDS
+// ==========================================
+model Market {
+  id        String    @id @default(uuid())
+  matchId   String
+  name      String    // e.g., "1X2", "Double Chance", "Over/Under 2.5"
+  isLocked  Boolean   @default(false) // Admin can lock a market instantly
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  outcomes  Outcome[] // One-to-many: e.g., "1X2" market has 3 outcomes (Home, Draw, Away)
+
+  @@index([matchId])
+}
+
+model Outcome {
+  id             String         @id @default(uuid())
+  marketId       String
+  name           String         // e.g., "Home", "Draw", "Away", "1X", "X2"
+  odds           Decimal        @db.Decimal(5, 2) // Current shifting odds (e.g., 2.15)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  market         Market         @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  betSelections  BetSelection[] // Keeps track of slips that selected this outcome
+
+  @@index([marketId])
+}
+
+// ==========================================
+// 🎫 USER SLIPS & BET SELECTIONS
+// ==========================================
+model Bet {
+  id              String         @id @default(uuid())
+  userId          String
+  stake           Decimal        @db.Decimal(10, 2) // Amount of money risked
+  potentialPayout Decimal        @db.Decimal(10, 2) // stake * cumulative odds
+  status          BetStatus      @default(PENDING)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selections      BetSelection[] // Supports Parlays/Accumulators (Multiple selections per bet)
+
+  @@index([userId])
+}
+
+enum BetStatus {
+  PENDING
+  WON
+  LOST
+  VOIDED
+}
+
+// This join table saves the EXACT odds at the moment the user placed the bet
+model BetSelection {
+  id         String          @id @default(uuid())
+  betId      String
+  outcomeId  String
+  oddsAtBet  Decimal         @db.Decimal(5, 2) // Locked-in odds for the user
+  status     SelectionStatus @default(PENDING) // Individual leg status
+
+  bet        Bet             @relation(fields: [betId], references: [id], onDelete: Cascade)
+  outcome    Outcome         @relation(fields: [outcomeId], references: [id])
+
+  @@index([betId])
+  @@index([outcomeId])
+}
+
+enum SelectionStatus {
+  PENDING
+  WON
+  LOST
+  VOIDED
+}
