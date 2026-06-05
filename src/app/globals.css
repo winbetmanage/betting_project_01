@@ -123,3 +123,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.sidebar-dark-orange {
+  --sidebar: #451b4a;
+  --sidebar-foreground: #e5e7eb;
+  --sidebar-accent: #672d6e;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #311335;
+  --sidebar-ring: #672d6e;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #451b4a;
+}
