@@ -20,7 +20,7 @@ export default function LoginPage() {
     fetch('/api/stats')
       .then((r) => r.json())
       .then((d) => setUserCount(d.userCount))
-      .catch(() => {});
+      .catch(() => setUserCount(-1));
   }, []);
 
   async function handleSubmit(e: FormEvent) {
@@ -76,10 +76,11 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-zinc-400">
             Access your account to place bets
           </p>
+
           {userCount != null && (
             <p className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500">
               <Users className="size-3.5" />
-              Number of users — {userCount.toLocaleString()}
+              Number of users — {userCount >= 0 ? userCount.toLocaleString() : 'Fetching failed'}
             </p>
           )}
 
