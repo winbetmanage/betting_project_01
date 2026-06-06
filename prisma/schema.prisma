@@ -5,9 +5,17 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
+  provider      = "prisma-client-js"
   output   = "../src/generated/prisma"
+    binaryTargets = ["native", "rhel-openssl-3.0.x"]
+
 }
+
+generator client_standard {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
 
 datasource db {
   provider = "mysql"
