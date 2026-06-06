@@ -9,7 +9,7 @@ type User = { id: string; email: string; username: string; role: string };
 
 const navLinks = [
   { href: '/user-dashboard', label: 'Home' },
-  { href: '/user-dashboard', label: 'Games' },
+  { href: '/user-dashboard/games', label: 'Games' },
   { href: '/user-dashboard/balance', label: 'Balance' },
   { href: '/profile', label: 'Profile' },
 ];

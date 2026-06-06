@@ -39,6 +39,7 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [matchesOpen, setMatchesOpen] = useState(false);
+  const [betsOpen, setBetsOpen] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
@@ -147,6 +148,41 @@ export default function AdminLayout({
                     </SidebarMenuSub>
                   )}
                 </SidebarMenuItem>
+              ) : link.label === 'Bets' ? (
+                <SidebarMenuItem key={link.href}>
+                  <SidebarMenuButton
+                    onClick={() => setBetsOpen(!betsOpen)}
+                    className="text-gray-200 data-active:text-white"
+                  >
+                    <link.icon />
+                    <span>{link.label}</span>
+                    <ChevronDown
+                      className={`ml-auto transition-transform ${betsOpen ? 'rotate-180' : ''}`}
+                    />
+                  </SidebarMenuButton>
+                  {betsOpen && (
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/bets/add-match" />}
+                          isActive={pathname === '/admin-dashboard/bets/add-match'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Add Match to Bet
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/bets/manage" />}
+                          isActive={pathname === '/admin-dashboard/bets/manage'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Manage Betting
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
               ) : (
                 <SidebarMenuItem key={link.href}>
                   <SidebarMenuButton
@@ -198,7 +234,7 @@ export default function AdminLayout({
         <header className="flex h-14 items-center gap-3 border-b border-zinc-300 bg-gray-200 px-4">
           <SidebarTrigger className="text-zinc-600 hover:text-zinc-900" />
           <span className="text-sm font-medium text-zinc-600">
-            {adminLinks.find((l) => l.href === pathname)?.label || 'Home'}
+            {adminLinks.find((l) => l.href === pathname)?.label || pathname.startsWith('/admin-dashboard/bets') ? 'Bets' : pathname.startsWith('/admin-dashboard/matches') ? 'Matches' : 'Home'}
           </span>
         </header>
         <div className="p-6">{children}</div>

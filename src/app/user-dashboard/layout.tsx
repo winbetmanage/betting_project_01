@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Toaster } from 'sonner';
 
 export default function UserDashboardLayout({
   children,
@@ -26,5 +27,15 @@ export default function UserDashboardLayout({
 
   if (!ready) return null;
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: { background: '#1a1a2e', color: '#e4e4e7', border: '1px solid #27272a' },
+        }}
+      />
+    </>
+  );
 }

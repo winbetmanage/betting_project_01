@@ -77,6 +77,8 @@ model Match {
   updatedAt           DateTime    @updatedAt
 addedtoBetting  Boolean     @default(false)
   markets             Market[]    // One-to-many: One match has multiple betting markets
+  bets                Bet[]
+  betSelections       BetSelection[]
 }
 
 enum GameResult {
@@ -147,16 +149,21 @@ model Outcome {
 model Bet {
   id              String         @id @default(uuid())
   userId          String
-  stake           Decimal        @db.Decimal(10, 2) // Amount of money risked
-  potentialPayout Decimal        @db.Decimal(10, 2) // stake * cumulative odds
+  matchId         String?        // null for parlays
+  typeofBet       TypeofBet?     // null for parlays
+  stake           Decimal        @db.Decimal(10, 2)
+  potentialPayout Decimal        @db.Decimal(10, 2)
+  cumulativeOdds  Decimal?       @db.Decimal(10, 2) // product of all selection odds (parlays)
   status          BetStatus      @default(PENDING)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  selections      BetSelection[] // Supports Parlays/Accumulators (Multiple selections per bet)
+  match           Match?         @relation(fields: [matchId], references: [id])
+  selections      BetSelection[]
 
   @@index([userId])
+  @@index([matchId])
 }
 
 enum BetStatus {
@@ -166,18 +173,40 @@ enum BetStatus {
   VOIDED
 }
 
+model BettingTypes{
+  id String @id @default(uuid())
+  name String
+  typeofBet TypeofBet
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([typeofBet])
+}
+
+enum TypeofBet {
+  HOME_WINS
+  AWAY_WINS
+  DRAW
+  HOME_WINS_OR_DRAW
+  AWAY_WINS_OR_DRAW
+}
+
 // This join table saves the EXACT odds at the moment the user placed the bet
 model BetSelection {
   id         String          @id @default(uuid())
   betId      String
-  outcomeId  String
+  matchId    String
+  typeofBet  TypeofBet
   oddsAtBet  Decimal         @db.Decimal(5, 2) // Locked-in odds for the user
   status     SelectionStatus @default(PENDING) // Individual leg status
+  outcomeId  String?
 
   bet        Bet             @relation(fields: [betId], references: [id], onDelete: Cascade)
-  outcome    Outcome         @relation(fields: [outcomeId], references: [id])
+  match      Match           @relation(fields: [matchId], references: [id])
+  outcome    Outcome?        @relation(fields: [outcomeId], references: [id])
 
   @@index([betId])
+  @@index([matchId])
   @@index([outcomeId])
 }
 
