@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Toggle } from '@/components/ui/toggle';
+import { Users } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +14,14 @@ export default function LoginPage() {
   const [adminLogin, setAdminLogin] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [userCount, setUserCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((r) => r.json())
+      .then((d) => setUserCount(d.userCount))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -67,6 +76,12 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-zinc-400">
             Access your account to place bets
           </p>
+          {userCount != null && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500">
+              <Users className="size-3.5" />
+              Number of users — {userCount.toLocaleString()}
+            </p>
+          )}
 
           {error && (
             <div className="mt-4 rounded-lg bg-red-900/40 px-4 py-2 text-sm text-red-300">
