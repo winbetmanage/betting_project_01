@@ -10,8 +10,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { CheckCircle, Eye } from 'lucide-react';
+import Link from 'next/link';
 import {
   useReactTable,
   getCoreRowModel,
@@ -91,17 +91,6 @@ export default function AdminTransactionsPage() {
   const [approving, setApproving] = useState(false);
   const [approveTarget, setApproveTarget] = useState<Transfer | null>(null);
 
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailTransfer, setDetailTransfer] = useState<Transfer | null>(null);
-  const [editAmount, setEditAmount] = useState('');
-  const [editType, setEditType] = useState('TELE_BIRR');
-  const [editTransactionId, setEditTransactionId] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editReason, setEditReason] = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-
   const fetchTransfers = useCallback(async (p: number) => {
     setLoading(true);
     try {
@@ -152,80 +141,6 @@ export default function AdminTransactionsPage() {
     }
   }
 
-  function openDetail(t: Transfer) {
-    setDetailTransfer(t);
-    setEditAmount(t.amount.toString());
-    setEditType(t.type);
-    setEditTransactionId(t.transactionId);
-    setEditName(t.name ?? '');
-    setEditPhone(t.phone ?? '');
-    setEditReason(t.reason ?? '');
-    setEditErrors({});
-    setDetailOpen(true);
-  }
-
-  async function handleDetailApprove() {
-    if (!detailTransfer) return;
-    try {
-      const res = await fetch('/api/admin/transactions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve', id: detailTransfer.id }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        alert(d.error || 'Failed to approve');
-        return;
-      }
-      setTransfers((prev) =>
-        prev.map((t) =>
-          t.id === detailTransfer.id ? { ...t, status: 'APPROVED' as TransferStatus } : t
-        )
-      );
-      setDetailTransfer((prev) => prev ? { ...prev, status: 'APPROVED' as TransferStatus } : null);
-    } catch {
-      alert('Network error');
-    }
-  }
-
-  async function handleEditSave() {
-    if (!detailTransfer) return;
-    const fieldErrors: Record<string, string> = {};
-    if (!editAmount || parseFloat(editAmount) <= 0) fieldErrors.amount = 'Amount must be positive';
-    if (!editTransactionId.trim()) fieldErrors.transactionId = 'Transaction ID is required';
-    if (Object.keys(fieldErrors).length > 0) { setEditErrors(fieldErrors); return; }
-
-    setEditSaving(true);
-    try {
-      const res = await fetch('/api/admin/transactions', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'edit',
-          id: detailTransfer.id,
-          amount: parseFloat(editAmount),
-          transactionId: editTransactionId.trim(),
-          type: editType,
-          name: editName.trim() || null,
-          phone: editPhone.trim() || null,
-          reason: editReason.trim() || null,
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        setEditErrors(d.errors ?? { form: 'Failed to update' });
-        return;
-      }
-      const updated = await res.json();
-      setTransfers((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
-      setDetailTransfer((prev) => prev ? { ...prev, ...updated } : null);
-    } catch {
-      setEditErrors({ form: 'Network error' });
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
   const totalPages = Math.ceil(total / pageSize);
 
   const columns = useMemo(() => {
@@ -269,10 +184,12 @@ export default function AdminTransactionsPage() {
                 Approve
               </Button>
             )}
-            <Button variant="outline" size="xs" onClick={() => openDetail(row.original)}>
-              <Eye className="size-3" />
-              Details
-            </Button>
+            <Link href={`/admin-dashboard/transactions/${row.original.id}`}>
+              <Button variant="outline" size="xs">
+                <Eye className="size-3" />
+                Details
+              </Button>
+            </Link>
           </div>
         ),
       }),
@@ -364,85 +281,6 @@ export default function AdminTransactionsPage() {
             <Button className="bg-gray-700 text-white hover:bg-gray-600" onClick={handleApprove} disabled={approving}>
               {approving ? 'Approving...' : 'Confirm Approve'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Details / Edit Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Transfer Details</DialogTitle>
-          </DialogHeader>
-
-          {editErrors.form && (
-            <div className="rounded-lg bg-red-900/40 px-4 py-2 text-sm text-red-300">{editErrors.form}</div>
-          )}
-
-          {detailTransfer && (
-            <div className="space-y-3">
-              <div className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm">
-                <span className="text-zinc-500">User</span>
-                <span className="font-medium text-zinc-800">{detailTransfer.user.username} ({detailTransfer.user.email})</span>
-              </div>
-              <div className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm">
-                <span className="text-zinc-500">Status</span>
-                <StatusBadge status={detailTransfer.status} />
-              </div>
-              <div className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2 text-sm">
-                <span className="text-zinc-500">Date</span>
-                <span className="text-zinc-700">{formatDate(detailTransfer.createdAt)}</span>
-              </div>
-
-              <div className="border-t border-zinc-200 pt-3">
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Amount <span className="text-red-400">*</span></label>
-                <Input type="number" step="0.01" min="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
-                {editErrors.amount && <p className="mt-1 text-xs text-red-400">{editErrors.amount}</p>}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Transfer Method <span className="text-red-400">*</span></label>
-                <select value={editType} onChange={(e) => setEditType(e.target.value)} className="h-8 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-700 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
-                  {transferTypes.map((t) => (<option key={t.value} value={t.value}>{t.label}</option>))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Transaction ID <span className="text-red-400">*</span></label>
-                <Input value={editTransactionId} onChange={(e) => setEditTransactionId(e.target.value)} />
-                {editErrors.transactionId && <p className="mt-1 text-xs text-red-400">{editErrors.transactionId}</p>}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Full Name</label>
-                <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Phone Number</label>
-                <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-500">Reason</label>
-                <Input value={editReason} onChange={(e) => setEditReason(e.target.value)} />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <DialogClose render={<Button className="bg-gray-700 text-red-400 hover:bg-gray-600" />}>Close</DialogClose>
-            {detailTransfer?.status === 'PENDING' && (
-              <>
-                <Button className="bg-gray-700 text-white hover:bg-gray-600" onClick={handleDetailApprove}>
-                  <CheckCircle className="size-3" />
-                  Approve
-                </Button>
-                <Button className="bg-gray-700 text-white hover:bg-gray-600" onClick={handleEditSave} disabled={editSaving}>
-                  {editSaving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

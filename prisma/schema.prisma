@@ -232,10 +232,11 @@ model moneyTransfers {
   amount Decimal @db.Decimal(10, 2)
   type TransferType @default(TELE_BIRR)
   status TransferStatus @default(PENDING)
-  transactionId String
+  transactionId String?
   name String?
   phone String?
   reason String?
+  img String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

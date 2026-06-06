@@ -36,6 +36,7 @@ const updateSchema = z.object({
   name: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   reason: z.string().optional().nullable(),
+  img: z.string().optional().nullable(),
 });
 
 export async function PUT(request: Request) {
@@ -92,6 +93,7 @@ export async function PUT(request: Request) {
           name: parsed.data.name,
           phone: parsed.data.phone,
           reason: parsed.data.reason,
+          img: parsed.data.img,
         },
       });
 

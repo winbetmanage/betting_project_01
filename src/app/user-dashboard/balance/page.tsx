@@ -39,10 +39,11 @@ type Transfer = {
   amount: number;
   type: TransferType;
   status: TransferStatus;
-  transactionId: string;
+  transactionId: string | null;
   name: string | null;
   phone: string | null;
   reason: string | null;
+  img: string | null;
   createdAt: string;
 };
 
@@ -101,6 +102,11 @@ export default function BalancePage() {
   const [addName, setAddName] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [addReason, setAddReason] = useState('');
+  const [addImg, setAddImg] = useState<File | null>(null);
+  const [addImgPreview, setAddImgPreview] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'failed'>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
 
   // transfers table
@@ -152,27 +158,33 @@ export default function BalancePage() {
     setAddName('');
     setAddPhone('');
     setAddReason('');
+    setAddImg(null);
+    setAddImgPreview(null);
+    setUploadStatus('idle');
+    setUploadProgress(0);
+    setUploadedUrl(null);
     setAddErrors({});
   }
 
   async function handleAddSubmit() {
     const fieldErrors: Record<string, string> = {};
     if (!addAmount || parseFloat(addAmount) <= 0) fieldErrors.amount = 'Amount must be positive';
-    if (!addTransactionId.trim()) fieldErrors.transactionId = 'Transaction ID is required';
     if (Object.keys(fieldErrors).length > 0) { setAddErrors(fieldErrors); return; }
 
     setSubmitting(true);
+
     try {
       const res = await fetch('/api/user/transfers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: parseFloat(addAmount),
-          transactionId: addTransactionId.trim(),
+          transactionId: addTransactionId.trim() || undefined,
           type: addType,
           name: addName.trim() || undefined,
           phone: addPhone.trim() || undefined,
           reason: addReason.trim() || undefined,
+          img: uploadedUrl || undefined,
         }),
       });
       if (!res.ok) {
@@ -183,7 +195,6 @@ export default function BalancePage() {
       setAddOpen(false);
       resetAddForm();
       setPage(1);
-      // reload transfers
       const r2 = await fetch(`/api/user/transfers?page=1&pageSize=${pageSize}`);
       const d2 = await r2.json();
       setTransfers(d2.transfers ?? []);
@@ -199,7 +210,7 @@ export default function BalancePage() {
     setDetailTransfer(t);
     setEditAmount(t.amount.toString());
     setEditType(t.type);
-    setEditTransactionId(t.transactionId);
+    setEditTransactionId(t.transactionId ?? '');
     setEditName(t.name ?? '');
     setEditPhone(t.phone ?? '');
     setEditReason(t.reason ?? '');
@@ -433,7 +444,7 @@ export default function BalancePage() {
 
       {/* Add Transfer Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Record Money Transfer</DialogTitle>
           </DialogHeader>
@@ -481,15 +492,75 @@ export default function BalancePage() {
 
             <div>
               <label className="mb-1 block text-xs font-medium text-zinc-500">
-                Transaction ID <span className="text-red-400">*</span>
+                Transaction ID
               </label>
               <Input
                 value={addTransactionId}
                 onChange={(e) => setAddTransactionId(e.target.value)}
-                placeholder="e.g. TRX-123456"
+                placeholder="e.g. TRX-123456 (optional)"
               />
-              {addErrors.transactionId && (
-                <p className="mt-1 text-xs text-red-400">{addErrors.transactionId}</p>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-zinc-500">Screenshot (optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadStatus === 'uploading'}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setAddImg(file);
+                  setAddImgPreview(file ? URL.createObjectURL(file) : null);
+                  if (!file) { setUploadStatus('idle'); setUploadProgress(0); setUploadedUrl(null); return; }
+
+                  setUploadStatus('uploading');
+                  setUploadProgress(0);
+
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  const xhr = new XMLHttpRequest();
+                  xhr.upload.addEventListener('progress', (evt) => {
+                    if (evt.lengthComputable) {
+                      setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+                    }
+                  });
+                  xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                      const data = JSON.parse(xhr.responseText);
+                      setUploadedUrl(data.url);
+                      setUploadStatus('done');
+                    } else {
+                      try {
+                        const err = JSON.parse(xhr.responseText);
+                        setAddErrors({ form: err.detail ? `Upload failed: ${err.detail}` : 'Upload failed' });
+                      } catch {
+                        setAddErrors({ form: 'Upload failed' });
+                      }
+                      setUploadStatus('failed');
+                    }
+                  });
+                  xhr.addEventListener('error', () => setUploadStatus('failed'));
+                  xhr.open('POST', '/api/upload');
+                  xhr.send(formData);
+                }}
+                className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-300 hover:file:bg-zinc-700 disabled:opacity-50"
+              />
+              {uploadStatus === 'uploading' && (
+                <div className="mt-2">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-primarycolor transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">Uploading... {uploadProgress}%</p>
+                </div>
+              )}
+              {uploadStatus === 'failed' && (
+                <p className="mt-1 text-xs text-red-400">Upload failed. Try selecting the file again.</p>
+              )}
+              {addImgPreview && uploadStatus !== 'uploading' && (
+                <img src={addImgPreview} alt="Preview" className="mt-2 max-h-32 rounded-lg object-contain" />
               )}
             </div>
 
@@ -523,8 +594,8 @@ export default function BalancePage() {
 
           <DialogFooter>
             <DialogClose render={<Button className="bg-gray-700 text-red-400 hover:bg-gray-600" />}>Cancel</DialogClose>
-            <Button className="bg-gray-700 text-white hover:bg-gray-600" onClick={handleAddSubmit} disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Submit'}
+            <Button className="bg-gray-700 text-white hover:bg-gray-600" onClick={handleAddSubmit} disabled={submitting || uploadStatus === 'uploading'}>
+              {submitting ? 'Submitting...' : uploadStatus === 'uploading' ? 'Uploading image...' : 'Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -532,7 +603,7 @@ export default function BalancePage() {
 
       {/* Detail / Edit Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {detailTransfer
@@ -633,6 +704,17 @@ export default function BalancePage() {
                   disabled={detailTransfer.status !== 'PENDING'}
                 />
               </div>
+
+              {detailTransfer.img && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-500">Screenshot</label>
+                  <img
+                    src={detailTransfer.img}
+                    alt="Transfer screenshot"
+                    className="max-h-48 w-full rounded-lg object-contain border border-zinc-700"
+                  />
+                </div>
+              )}
             </div>
           )}
 

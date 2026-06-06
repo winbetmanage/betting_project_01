@@ -1,6 +1,7 @@
 import schedule from '@/lib/full_game_schedule2.json';
 import countries from '@/lib/countries.json';
 import Image from 'next/image';
+import Link from 'next/link';
 import Navbar from '@/components/common_components/Navbar';
 import HeroSection from '@/components/common_components/HeroSection';
 
@@ -34,55 +35,57 @@ function MatchRow({ match }: { match: (typeof schedule)[number] }) {
   const awayFlag = countryFlagMap[match.awayTeam as keyof typeof countryFlagMap];
 
   return (
-    <div className="flex items-center gap-2 sm:gap-4 rounded-lg border border-zinc-200 bg-white px-3 py-3 sm:px-5 sm:py-4 text-secondarycolor shadow-sm transition hover:shadow-md">
-      <div className="hidden min-w-[80px] text-xs text-zinc-500 sm:block">
-        {formatDate(match.date)}
-      </div>
-
-      <div className="flex flex-1 items-center gap-2 sm:gap-3">
-        <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row">
-          {homeFlag && (
-            <Image
-              src={`/flags/${homeFlag}`}
-              alt={match.homeTeam}
-              width={24}
-              height={16}
-              className="h-4 w-6 object-cover"
-            />
-          )}
-          <span className="truncate text-xs font-medium text-right sm:text-left sm:text-sm">
-            {match.homeTeam}
-          </span>
+    <Link href="/user-dashboard/games" className="block">
+      <div className="flex items-center gap-2 sm:gap-4 rounded-lg border border-zinc-200 bg-white px-3 py-3 sm:px-5 sm:py-4 text-secondarycolor shadow-sm transition hover:shadow-md cursor-pointer">
+        <div className="hidden min-w-[80px] text-xs text-zinc-500 sm:block">
+          {formatDate(match.date)}
         </div>
 
-        <span className="shrink-0 text-xs font-bold text-zinc-400">VS</span>
+        <div className="flex flex-1 items-center gap-2 sm:gap-3">
+          <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row">
+            {homeFlag && (
+              <Image
+                src={`/flags/${homeFlag}`}
+                alt={match.homeTeam}
+                width={24}
+                height={16}
+                className="h-4 w-6 object-cover"
+              />
+            )}
+            <span className="truncate text-xs font-medium text-right sm:text-left sm:text-sm">
+              {match.homeTeam}
+            </span>
+          </div>
 
-        <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row-reverse">
-          {awayFlag && (
-            <Image
-              src={`/flags/${awayFlag}`}
-              alt={match.awayTeam}
-              width={24}
-              height={16}
-              className="h-4 w-6 object-cover"
-            />
-          )}
-          <span className="truncate text-xs font-medium sm:text-sm">
-            {match.awayTeam}
-          </span>
+          <span className="shrink-0 text-xs font-bold text-zinc-400">VS</span>
+
+          <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row-reverse">
+            {awayFlag && (
+              <Image
+                src={`/flags/${awayFlag}`}
+                alt={match.awayTeam}
+                width={24}
+                height={16}
+                className="h-4 w-6 object-cover"
+              />
+            )}
+            <span className="truncate text-xs font-medium sm:text-sm">
+              {match.awayTeam}
+            </span>
+          </div>
+        </div>
+
+        <div className="hidden text-right text-xs text-zinc-500 md:block">
+          <div>{match.timeLocal}</div>
+          <div className="text-zinc-400">{match.stadium}</div>
+        </div>
+
+        <div className="block text-right text-xs text-zinc-500 md:hidden">
+          <div>{formatDate(match.date)}</div>
+          <div>{match.timeLocal}</div>
         </div>
       </div>
-
-      <div className="hidden text-right text-xs text-zinc-500 md:block">
-        <div>{match.timeLocal}</div>
-        <div className="text-zinc-400">{match.stadium}</div>
-      </div>
-
-      <div className="block text-right text-xs text-zinc-500 md:hidden">
-        <div>{formatDate(match.date)}</div>
-        <div>{match.timeLocal}</div>
-      </div>
-    </div>
+    </Link>
   );
 }
 
@@ -136,6 +139,12 @@ export default function UserDashboard() {
             if (stage === 'Group Stage') {
               return (
                 <section key={stage}>
+                  <Link
+                    href="/user-dashboard/games"
+                    className="mb-6 block w-full rounded-xl bg-primarycolor px-6 py-4 text-center text-lg font-bold text-white transition hover:brightness-90"
+                  >
+                    Start Betting
+                  </Link>
                   <h2 className="mb-5 text-xl font-bold text-white">
                     {stage}
                   </h2>

@@ -5,17 +5,18 @@ import { z } from 'zod';
 
 const createSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
-  transactionId: z.string().min(1, 'Transaction ID is required'),
+  transactionId: z.string().optional(),
   type: z.enum(['TELE_BIRR', 'CBE', 'AWASH_BANK', 'ABYSSINIA_BANK', 'DASHEN_BANK', 'M_PESA']),
   name: z.string().optional(),
   phone: z.string().optional(),
   reason: z.string().optional(),
+  img: z.string().optional(),
 });
 
 const updateSchema = z.object({
   id: z.string().min(1),
   amount: z.number().positive('Amount must be positive'),
-  transactionId: z.string().min(1, 'Transaction ID is required'),
+  transactionId: z.string().optional(),
   type: z.enum(['TELE_BIRR', 'CBE', 'AWASH_BANK', 'ABYSSINIA_BANK', 'DASHEN_BANK', 'M_PESA']),
   name: z.string().optional(),
   phone: z.string().optional(),
@@ -42,7 +43,12 @@ export async function GET(request: NextRequest) {
     prisma.moneyTransfers.count({ where: { userId: session.id } }),
   ]);
 
-  return NextResponse.json({ transfers, total, page, pageSize });
+  const serialized = transfers.map((t) => ({
+    ...t,
+    amount: Number(t.amount),
+  }));
+
+  return NextResponse.json({ transfers: serialized, total, page, pageSize });
 }
 
 export async function POST(request: Request) {
@@ -60,19 +66,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    const transfer = await prisma.moneyTransfers.create({
-      data: {
-        userId: session.id,
-        amount: parsed.data.amount,
-        transactionId: parsed.data.transactionId,
-        type: parsed.data.type,
-        name: parsed.data.name,
-        phone: parsed.data.phone,
-        reason: parsed.data.reason,
-      },
-    });
+    const data: any = {
+      userId: session.id,
+      amount: parsed.data.amount,
+      type: parsed.data.type,
+    };
+    if (parsed.data.transactionId) data.transactionId = parsed.data.transactionId;
+    if (parsed.data.name) data.name = parsed.data.name;
+    if (parsed.data.phone) data.phone = parsed.data.phone;
+    if (parsed.data.reason) data.reason = parsed.data.reason;
+    if (parsed.data.img) data.img = parsed.data.img;
 
-    return NextResponse.json(transfer, { status: 201 });
+    const transfer = await prisma.moneyTransfers.create({ data });
+
+    return NextResponse.json({ ...transfer, amount: Number(transfer.amount) }, { status: 201 });
   } catch {
     return NextResponse.json(
       { errors: { form: ['Something went wrong'] } },
@@ -111,19 +118,21 @@ export async function PUT(request: Request) {
       );
     }
 
+    const data: any = {
+      amount: parsed.data.amount,
+      type: parsed.data.type,
+    };
+    if (parsed.data.transactionId) data.transactionId = parsed.data.transactionId;
+    if (parsed.data.name) data.name = parsed.data.name;
+    if (parsed.data.phone) data.phone = parsed.data.phone;
+    if (parsed.data.reason) data.reason = parsed.data.reason;
+
     const updated = await prisma.moneyTransfers.update({
       where: { id: parsed.data.id },
-      data: {
-        amount: parsed.data.amount,
-        transactionId: parsed.data.transactionId,
-        type: parsed.data.type,
-        name: parsed.data.name,
-        phone: parsed.data.phone,
-        reason: parsed.data.reason,
-      },
+      data,
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, amount: Number(updated.amount) });
   } catch {
     return NextResponse.json(
       { errors: { form: ['Something went wrong'] } },
