@@ -20,7 +20,7 @@ datasource db {
 // ==========================================
 model User {
   id        String   @id @default(uuid())
-  status    UserStatus   @default(PENDING)
+  status    UserStatus   @default(ACTIVE)
   email     String   @unique
   username  String   @unique
   password  String   // Hashed password
@@ -30,6 +30,7 @@ model User {
   updatedAt DateTime @updatedAt
   
   bets      Bet[]    // One-to-many: One user can place multiple bets
+  transfers moneyTransfers[] // One-to-many: Money transfer requests
 }
 
 model Admin{
@@ -60,11 +61,14 @@ model Match {
   homeTeam            String
   awayTeam            String
   kickoffTime         DateTime
-  stage               String      // e.g., "Group Stage", "Round of 16", "Final"
+  stage               String   
+  addToBetting Boolean @default(false)
+
   status              MatchStatus @default(UPCOMING)
+  winner GameResult @default(NOTDECIDED)
   homeScore           Int?        // Null until match starts/ends
   awayScore           Int?
-  
+  gameOddsTable       GameOddsTable?
   // Automation flags for your 10-minute cron check
   preMatchSynced      Boolean     @default(false)
   postMatchSettled    Boolean     @default(false)
@@ -73,6 +77,30 @@ model Match {
   updatedAt           DateTime    @updatedAt
 addedtoBetting  Boolean     @default(false)
   markets             Market[]    // One-to-many: One match has multiple betting markets
+}
+
+enum GameResult {
+  NOTDECIDED
+  HOMEWIN
+  AWAYWIN
+  DRAW
+  CANCELLED
+  POSTPONED
+  NOTPLAYED
+}
+
+model GameOddsTable {
+  id            Int       @id @default(autoincrement())
+  matchId       String    @unique
+  match         Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+
+  homeTeamOdds  Float?
+  awayTeamOdds  Float?
+  drawOdds      Float?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 enum MatchStatus {
@@ -158,4 +186,38 @@ enum SelectionStatus {
   WON
   LOST
   VOIDED
+}
+
+
+model moneyTransfers {
+  id String @id @default(uuid())
+  userId String
+  amount Decimal @db.Decimal(10, 2)
+  type TransferType @default(TELE_BIRR)
+  status TransferStatus @default(PENDING)
+  transactionId String
+  name String?
+  phone String?
+  reason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum TransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransferType {
+TELE_BIRR
+CBE
+AWASH_BANK
+ABYSSINIA_BANK
+DASHEN_BANK
+M_PESA
 }

@@ -10,6 +10,7 @@ type User = { id: string; email: string; username: string };
 export default function ProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -26,6 +27,13 @@ export default function ProfilePage() {
       .catch(() => router.push('/login'))
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    fetch('/api/user/balance')
+      .then((r) => r.json())
+      .then((data) => setBalance(Number(data.balance)))
+      .catch(() => {});
+  }, []);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -73,7 +81,7 @@ export default function ProfilePage() {
             <div className="flex justify-between">
               <span className="text-sm text-zinc-400">Balance</span>
               <span className="text-sm font-semibold text-primarycolor">
-                $0.00
+                ETB {balance?.toFixed(2) ?? '0.00'}
               </span>
             </div>
           </div>
