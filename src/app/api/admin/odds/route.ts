@@ -9,7 +9,12 @@ export async function GET() {
   }
 
   const matches = await prisma.match.findMany({
-    include: { gameOddsTable: true },
+    include: {
+      gameOddsTable: true,
+      marketOdds: {
+        orderBy: [{ marketKey: 'asc' }, { outcomeName: 'asc' }],
+      },
+    },
     orderBy: { kickoffTime: 'asc' },
   });
 
@@ -23,7 +28,23 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { matchId, homeTeamOdds, awayTeamOdds, drawOdds } = await request.json();
+    const body = await request.json();
+
+    // ── MarketOdds update path ──
+    if (body.marketOddsId) {
+      const { marketOddsId, odds } = body;
+      if (odds == null || odds <= 0) {
+        return NextResponse.json({ error: 'Invalid odds value' }, { status: 400 });
+      }
+      const updated = await prisma.marketOdds.update({
+        where: { id: marketOddsId },
+        data: { odds },
+      });
+      return NextResponse.json(updated);
+    }
+
+    // ── Legacy GameOddsTable update path (h2h) ──
+    const { matchId, homeTeamOdds, awayTeamOdds, drawOdds } = body;
 
     if (!matchId) {
       return NextResponse.json({ error: 'matchId is required' }, { status: 400 });

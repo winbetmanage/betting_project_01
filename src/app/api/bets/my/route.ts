@@ -33,7 +33,10 @@ export async function GET() {
         select: {
           id: true,
           matchId: true,
+          marketKey: true,
           typeofBet: true,
+          point: true,
+          outcomeName: true,
           oddsAtBet: true,
           status: true,
           match: {

@@ -20,6 +20,7 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Home, Swords, WalletCards, Ticket, Users, UserCircle, LogOut, Eye, ChevronDown, ArrowLeftRight } from 'lucide-react';
+import { Toaster } from 'sonner';
 
 const adminLinks = [
   { href: '/admin-dashboard', label: 'Home', icon: Home },
@@ -39,6 +40,7 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [matchesOpen, setMatchesOpen] = useState(false);
+  const [marketsOpen, setMarketsOpen] = useState(false);
   const [betsOpen, setBetsOpen] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -116,7 +118,7 @@ export default function AdminLayout({
                       className={`ml-auto transition-transform ${matchesOpen ? 'rotate-180' : ''}`}
                     />
                   </SidebarMenuButton>
-                  {matchesOpen && (
+                    {matchesOpen && (
                     <SidebarMenuSub>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton
@@ -145,6 +147,50 @@ export default function AdminLayout({
                           Manage Odds
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/fetched-matches" />}
+                          isActive={pathname === '/admin-dashboard/fetched-matches'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Feched Matchs
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenuItem>
+              ) : link.label === 'Markets' ? (
+                <SidebarMenuItem key={link.href}>
+                  <SidebarMenuButton
+                    onClick={() => setMarketsOpen(!marketsOpen)}
+                    className="text-gray-200 data-active:text-white"
+                  >
+                    <link.icon />
+                    <span>{link.label}</span>
+                    <ChevronDown
+                      className={`ml-auto transition-transform ${marketsOpen ? 'rotate-180' : ''}`}
+                    />
+                  </SidebarMenuButton>
+                  {marketsOpen && (
+                    <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/markets/market-odds" />}
+                          isActive={pathname === '/admin-dashboard/markets/market-odds'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Market Odds
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/markets/manage-market-types" />}
+                          isActive={pathname === '/admin-dashboard/markets/manage-market-types'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Manage Market Types
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
                     </SidebarMenuSub>
                   )}
                 </SidebarMenuItem>
@@ -162,6 +208,15 @@ export default function AdminLayout({
                   </SidebarMenuButton>
                   {betsOpen && (
                     <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton
+                          render={<Link href="/admin-dashboard/bets/games" />}
+                          isActive={pathname === '/admin-dashboard/bets/games'}
+                          className="text-gray-200 data-active:text-white"
+                        >
+                          Games
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton
                           render={<Link href="/admin-dashboard/bets/add-match" />}
@@ -234,10 +289,16 @@ export default function AdminLayout({
         <header className="flex h-14 items-center gap-3 border-b border-zinc-300 bg-gray-200 px-4">
           <SidebarTrigger className="text-zinc-600 hover:text-zinc-900" />
           <span className="text-sm font-medium text-zinc-600">
-            {adminLinks.find((l) => l.href === pathname)?.label || pathname.startsWith('/admin-dashboard/bets') ? 'Bets' : pathname.startsWith('/admin-dashboard/matches') ? 'Matches' : 'Home'}
+            {pathname === '/admin-dashboard/fetched-matches' ? 'Feched Matchs' : pathname === '/admin-dashboard/bets/games' ? 'Games' : pathname === '/admin-dashboard/markets/market-odds' ? 'Market Odds' : pathname === '/admin-dashboard/markets/manage-market-types' ? 'Manage Market Types' : adminLinks.find((l) => l.href === pathname)?.label || pathname.startsWith('/admin-dashboard/bets') ? 'Bets' : pathname.startsWith('/admin-dashboard/markets') ? 'Markets' : pathname.startsWith('/admin-dashboard/matches') ? 'Matches' : 'Home'}
           </span>
         </header>
         <div className="p-6">{children}</div>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          toastOptions={{ style: { fontFamily: 'var(--font-sans)' } }}
+        />
       </SidebarInset>
     </SidebarProvider>
   );

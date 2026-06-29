@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Wallet, Plus, Eye } from 'lucide-react';
+import { Wallet, Plus, Eye, ArrowUpRight, ArrowDownLeft, History } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -39,6 +39,7 @@ type Transfer = {
   amount: number;
   type: TransferType;
   status: TransferStatus;
+  direction: 'deposit' | 'withdrawal';
   transactionId: string | null;
   name: string | null;
   phone: string | null;
@@ -89,6 +90,9 @@ const typeLabels: Record<TransferType, string> = {
 export default function BalancePage() {
   const router = useRouter();
 
+  // active tab
+  const [activeTab, setActiveTab] = useState<'add' | 'withdraw' | 'history'>('add');
+
   // balance
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,6 +112,17 @@ export default function BalancePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+
+  // withdraw form
+  const [wdAmount, setWdAmount] = useState('');
+  const [wdType, setWdType] = useState('TELE_BIRR');
+  const [wdName, setWdName] = useState('');
+  const [wdPhone, setWdPhone] = useState('');
+  const [wdAccount, setWdAccount] = useState('');
+  const [wdReason, setWdReason] = useState('');
+  const [wdSubmitting, setWdSubmitting] = useState(false);
+  const [wdErrors, setWdErrors] = useState<Record<string, string>>({});
+  const [wdSuccess, setWdSuccess] = useState<string | null>(null);
 
   // transfers table
   const [transfers, setTransfers] = useState<Transfer[]>([]);
@@ -206,6 +221,58 @@ export default function BalancePage() {
     }
   }
 
+  function resetWdForm() {
+    setWdAmount('');
+    setWdType('TELE_BIRR');
+    setWdName('');
+    setWdPhone('');
+    setWdAccount('');
+    setWdReason('');
+    setWdErrors({});
+    setWdSuccess(null);
+  }
+
+  async function handleWdSubmit() {
+    const fieldErrors: Record<string, string> = {};
+    const amt = parseFloat(wdAmount);
+    if (!wdAmount || amt <= 0) fieldErrors.amount = 'Amount must be positive';
+    if (!wdName.trim()) fieldErrors.name = 'Account holder name is required';
+    if (Object.keys(fieldErrors).length > 0) { setWdErrors(fieldErrors); return; }
+
+    setWdSubmitting(true);
+    setWdSuccess(null);
+
+    try {
+      const res = await fetch('/api/user/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          type: wdType,
+          name: wdName.trim(),
+          phone: wdPhone.trim() || undefined,
+          accountNumber: wdAccount.trim() || undefined,
+          reason: wdReason.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setWdErrors(data.errors ?? { form: 'Failed to submit withdrawal request' });
+        return;
+      }
+      setWdSuccess(`Withdrawal request of ETB ${amt.toFixed(2)} submitted successfully. Pending admin approval.`);
+      resetWdForm();
+      // Refresh balance
+      const br = await fetch('/api/user/balance');
+      const bd = await br.json();
+      if (bd.balance != null) setBalance(Number(bd.balance));
+    } catch {
+      setWdErrors({ form: 'Network error. Please try again.' });
+    } finally {
+      setWdSubmitting(false);
+    }
+  }
+
   function openDetail(t: Transfer) {
     setDetailTransfer(t);
     setEditAmount(t.amount.toString());
@@ -213,7 +280,9 @@ export default function BalancePage() {
     setEditTransactionId(t.transactionId ?? '');
     setEditName(t.name ?? '');
     setEditPhone(t.phone ?? '');
-    setEditReason(t.reason ?? '');
+    // Strip WITHDRAWAL: prefix for display
+    const rawReason = t.reason ?? '';
+    setEditReason(rawReason.replace(/^WITHDRAWAL:\s*/, ''));
     setEditErrors({});
     setDetailOpen(true);
   }
@@ -260,6 +329,18 @@ export default function BalancePage() {
   const columns = useMemo(() => {
     const ch = createColumnHelper<Transfer>();
     return [
+      ch.accessor('direction', {
+        header: 'Type',
+        cell: (info) => {
+          const dir = info.getValue();
+          return (
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold ${dir === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>
+              {dir === 'deposit' ? <ArrowDownLeft className="size-3" /> : <ArrowUpRight className="size-3" />}
+              {dir === 'deposit' ? 'Deposit' : 'Withdrawal'}
+            </span>
+          );
+        },
+      }),
       ch.accessor('amount', {
         header: 'Amount',
         cell: (info) => (
@@ -332,7 +413,36 @@ export default function BalancePage() {
               </p>
             )}
           </div>
+        </div>
 
+        {/* Tab Navigation */}
+        <div className="mt-8 flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+          {([
+            { key: 'add', label: 'Add Money', icon: Plus },
+            { key: 'withdraw', label: 'Withdraw', icon: ArrowUpRight },
+            { key: 'history', label: 'History', icon: History },
+          ] as const).map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => { setActiveTab(tab.key); setWdSuccess(null); setWdErrors({}); }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                  activeTab === tab.key
+                    ? 'bg-primarycolor text-white shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab Content: Add Money */}
+        {activeTab === 'add' && (
           <div className="mt-6">
             <Button
               className="w-full"
@@ -345,101 +455,208 @@ export default function BalancePage() {
               <Plus className="size-4" />
               Add Balance
             </Button>
+            <p className="mt-3 text-center text-xs text-zinc-500">
+              Record a deposit you made via mobile money or bank transfer
+            </p>
           </div>
-        </div>
+        )}
 
-        {/* Transfers Table */}
-        <div className="mt-10">
-          <h2 className="mb-4 text-lg font-bold text-white">Transfer History</h2>
+        {/* Tab Content: Withdraw */}
+        {activeTab === 'withdraw' && (
+          <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+            <h2 className="mb-4 text-lg font-bold text-white">Withdraw Funds</h2>
 
-          <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900 shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                {table.getHeaderGroups().map((hg) => (
-                  <tr
-                    key={hg.id}
-                    className="border-b border-zinc-800 bg-zinc-950 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500"
-                  >
-                    {hg.headers.map((header) => (
-                      <th key={header.id} className="px-4 py-3">
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                      </th>
-                    ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody>
-                {tableLoading ? (
-                  <tr>
-                    <td
-                      colSpan={columns.length}
-                      className="px-4 py-12 text-center text-sm text-zinc-500"
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                ) : table.getRowModel().rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={columns.length}
-                      className="px-4 py-12 text-center text-sm text-zinc-500"
-                    >
-                      No transfers yet
-                    </td>
-                  </tr>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
+            {wdSuccess && (
+              <div className="mb-4 rounded-lg bg-green-900/40 px-4 py-3 text-sm text-green-300">{wdSuccess}</div>
+            )}
+
+            {wdErrors.form && (
+              <div className="mb-4 rounded-lg bg-red-900/40 px-4 py-2 text-sm text-red-300">{wdErrors.form}</div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Amount <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="number" step="0.01" min="0.01"
+                  value={wdAmount}
+                  onChange={(e) => setWdAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-primarycolor"
+                />
+                {wdErrors.amount && <p className="mt-1 text-xs text-red-400">{wdErrors.amount}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Withdrawal Method <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={wdType}
+                  onChange={(e) => setWdType(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-300 outline-none focus:border-primarycolor"
+                >
+                  {transferTypes.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                  Account Holder Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={wdName}
+                  onChange={(e) => setWdName(e.target.value)}
+                  placeholder="Full name on the account"
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-primarycolor"
+                />
+                {wdErrors.name && <p className="mt-1 text-xs text-red-400">{wdErrors.name}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">Phone Number</label>
+                <input
+                  type="text"
+                  value={wdPhone}
+                  onChange={(e) => setWdPhone(e.target.value)}
+                  placeholder="+251 9XX XXX XXX"
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-primarycolor"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">Account / Wallet Number</label>
+                <input
+                  type="text"
+                  value={wdAccount}
+                  onChange={(e) => setWdAccount(e.target.value)}
+                  placeholder="Account number or wallet ID"
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-primarycolor"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500">Note (optional)</label>
+                <input
+                  type="text"
+                  value={wdReason}
+                  onChange={(e) => setWdReason(e.target.value)}
+                  placeholder="Any additional info"
+                  className="h-10 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-primarycolor"
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleWdSubmit}
+                disabled={wdSubmitting}
+              >
+                {wdSubmitting ? 'Submitting...' : 'Submit Withdrawal Request'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Content: History */}
+        {activeTab === 'history' && (
+          <div className="mt-6">
+            <h2 className="mb-4 text-lg font-bold text-white">Transaction History</h2>
+
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900 shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  {table.getHeaderGroups().map((hg) => (
                     <tr
-                      key={row.id}
-                      className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
+                      key={hg.id}
+                      className="border-b border-zinc-800 bg-zinc-950 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500"
                     >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-3">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
+                      {hg.headers.map((header) => (
+                        <th key={header.id} className="px-4 py-3">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </th>
                       ))}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-zinc-400">
-              <span>
-                Page {page} of {totalPages} ({total} total)
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
+                  ))}
+                </thead>
+                <tbody>
+                  {tableLoading ? (
+                    <tr>
+                      <td
+                        colSpan={columns.length}
+                        className="px-4 py-12 text-center text-sm text-zinc-500"
+                      >
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : table.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={columns.length}
+                        className="px-4 py-12 text-center text-sm text-zinc-500"
+                      >
+                        No transactions yet
+                      </td>
+                    </tr>
+                  ) : (
+                    table.getRowModel().rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="border-b border-zinc-800 last:border-0 hover:bg-zinc-800/50"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-4 py-3">
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between text-sm text-zinc-400">
+                <span>
+                  Page {page} of {totalPages} ({total} total)
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Add Transfer Dialog */}
@@ -607,8 +824,8 @@ export default function BalancePage() {
           <DialogHeader>
             <DialogTitle>
               {detailTransfer
-                ? `${typeLabels[detailTransfer.type as TransferType]} Transfer`
-                : 'Transfer Details'}
+                ? `${typeLabels[detailTransfer.type as TransferType]} ${detailTransfer.direction === 'withdrawal' ? 'Withdrawal' : 'Deposit'}`
+                : 'Transaction Details'}
             </DialogTitle>
           </DialogHeader>
 
@@ -620,6 +837,13 @@ export default function BalancePage() {
 
           {detailTransfer && (
             <div className="space-y-3">
+              <div className="flex justify-between rounded-lg bg-zinc-950 px-3 py-2 text-sm">
+                <span className="text-zinc-500">Type</span>
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold ${detailTransfer.direction === 'deposit' ? 'text-green-400' : 'text-red-400'}`}>
+                  {detailTransfer.direction === 'deposit' ? <ArrowDownLeft className="size-3" /> : <ArrowUpRight className="size-3" />}
+                  {detailTransfer.direction === 'deposit' ? 'Deposit' : 'Withdrawal'}
+                </span>
+              </div>
               <div className="flex justify-between rounded-lg bg-zinc-950 px-3 py-2 text-sm">
                 <span className="text-zinc-500">Status</span>
                 <StatusBadge status={detailTransfer.status} />

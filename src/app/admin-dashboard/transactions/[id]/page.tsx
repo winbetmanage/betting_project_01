@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -118,12 +119,13 @@ export default function TransferDetailPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || 'Failed to approve');
+        toast.error(d.error || 'Failed to approve');
         return;
       }
+      toast.success('Transaction approved');
       setTransfer((prev) => prev ? { ...prev, status: 'APPROVED' } : null);
     } catch {
-      alert('Network error');
+      toast.error('Network error');
     }
   }
 

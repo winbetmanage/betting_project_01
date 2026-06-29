@@ -85,8 +85,17 @@ model Match {
   updatedAt           DateTime    @updatedAt
 addedtoBetting  Boolean     @default(false)
   markets             Market[]    // One-to-many: One match has multiple betting markets
+  marketOdds          MarketOdds[] // Polymorphic odds for all market types (up to 20)
   bets                Bet[]
   betSelections       BetSelection[]
+
+
+  h2hRecords h2h_records[]
+  totalsRecords totals_records[]
+  bttsRecords btts_records[]
+  doubleChanceRecords double_chance_records[]
+  noBetRecords no_bet_records[]
+  spreadRecords spread_records[]
 }
 
 enum GameResult {
@@ -113,6 +122,30 @@ model GameOddsTable {
   updatedAt     DateTime  @updatedAt
 }
 
+// ==========================================
+// 📊 EXPANDED MARKET ODDS (Up to 20 Markets)
+// ==========================================
+// Generic polymorphic market-odds store for all market types from The Odds API.
+// Replaces the old static h2h-only approach with a flexible key-value structure
+// that can represent any market (totals, spreads, BTTS, player props, etc.).
+// ==========================================
+model MarketOdds {
+  id            String   @id @default(uuid())
+  gameId        String
+  marketKey     String   // e.g., 'h2h', 'btts', 'totals', 'spreads', 'h2h_h1', 'totals_home', 'player_anytime_td'
+  outcomeName   String   // e.g., 'Home', 'Away', 'Draw', 'Yes', 'No', 'Over', 'Under', 'Lionel Messi'
+  point         Decimal? @db.Decimal(5, 2) // vital for totals (2.5) and spreads (-1.5); null for h2h/btts
+  odds          Decimal  @db.Decimal(10, 2)
+  bookmakerKey  String   @default("pinnacle") // e.g., 'pinnacle', 'bet365', 'williamhill'
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  match         Match    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+  @@index([gameId, marketKey])
+  @@map("market_odds")
+}
+
 enum MatchStatus {
   UPCOMING
   LIVE
@@ -136,6 +169,94 @@ model Market {
 
   @@index([matchId])
 }
+
+
+model h2h_records{
+  id String @id @default(uuid())
+  type_name String?
+  matchId String
+  match Match @relation(fields: [matchId], references: [id])
+  home_wins Decimal @db.Decimal(10, 2)
+  away_wins Decimal @db.Decimal(10, 2)
+  draw Decimal @db.Decimal(10, 2)
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+}
+model totals_records{
+  id String @id @default(uuid())
+  type_name String?
+  matchId String
+  match Match @relation(fields: [matchId], references: [id])
+  over Decimal? @db.Decimal(10, 2)
+  under Decimal? @db.Decimal(10, 2)
+  point Decimal @db.Decimal(10, 2)
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+}
+
+model btts_records{
+  id String @id @default(uuid())
+  type_name String?
+  matchId String
+  match Match @relation(fields: [matchId], references: [id])
+  yes Decimal @db.Decimal(10, 2)
+  no Decimal @db.Decimal(10, 2)
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+}
+
+model double_chance_records{
+  id String @id @default(uuid())
+  type_name String?
+  matchId String
+  match Match @relation(fields: [matchId], references: [id])
+  home_draw Decimal @db.Decimal(10, 2)
+  away_draw Decimal @db.Decimal(10, 2)
+  home_away Decimal @db.Decimal(10, 2)
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+}
+
+model no_bet_records{
+id String @id @default(uuid())
+type_name String?
+matchId String
+match Match @relation(fields: [matchId], references: [id])
+
+home Decimal @db.Decimal(10,2)
+away Decimal @db.Decimal(10,2)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+}
+
+model spread_records{
+id String @id @default(uuid())
+matchId String
+type_name String?
+match Match @relation(fields: [matchId], references: [id])
+teams String
+team Decimal @db.Decimal(10,2)
+points Decimal @db.Decimal(10,2)
+
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+}
+
+  
+
+
+
 
 model Outcome {
   id             String         @id @default(uuid())
@@ -191,27 +312,70 @@ model BettingTypes{
   @@index([typeofBet])
 }
 
+model TypesOfMarkets {
+  id        String   @id @default(uuid())
+  name      String
+  shortName String   @unique
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum TypeofBet {
+  // Core h2h
   HOME_WINS
   AWAY_WINS
   DRAW
+
+  // Double chance / draw no bet
   HOME_WINS_OR_DRAW
   AWAY_WINS_OR_DRAW
+  HOME_OR_AWAY
+
+  // Both teams to score
+  BOTH_TEAMS_TO_SCORE_YES
+  BOTH_TEAMS_TO_SCORE_NO
+
+  // Totals / Over-Under
+  OVER
+  UNDER
+
+  // Spreads / Handicaps
+  HOME_COVER
+  AWAY_COVER
+
+  // Half-time markets (H1)
+  HT_HOME_WINS
+  HT_AWAY_WINS
+  HT_DRAW
+
+  // Second-half markets (H2)
+  HT2_HOME_WINS
+  HT2_AWAY_WINS
+  HT2_DRAW
+
+  // Player props (generic — actual player name stored in BetSelection.outcomeName)
+  ANYTIME_GOALSCORER
+  FIRST_GOALSCORER
+  LAST_GOALSCORER
 }
 
 // This join table saves the EXACT odds at the moment the user placed the bet
 model BetSelection {
-  id         String          @id @default(uuid())
-  betId      String
-  matchId    String
-  typeofBet  TypeofBet
-  oddsAtBet  Decimal         @db.Decimal(5, 2) // Locked-in odds for the user
-  status     SelectionStatus @default(PENDING) // Individual leg status
-  outcomeId  String?
+  id          String          @id @default(uuid())
+  betId       String
+  matchId     String
+  marketKey   String          @default("h2h") // Which market this leg belongs to ("h2h", "btts", "totals", etc.)
+  typeofBet   TypeofBet
+  point       Decimal?        @db.Decimal(5, 2) // Locked-in point for totals/spreads (e.g., 2.5, -1.5)
+  outcomeName String?         // Human-readable outcome label (e.g., "Lionel Messi" for player props)
+  oddsAtBet   Decimal         @db.Decimal(5, 2) // Locked-in odds for the user
+  status      SelectionStatus @default(PENDING) // Individual leg status
+  outcomeId   String?
 
-  bet        Bet             @relation(fields: [betId], references: [id], onDelete: Cascade)
-  match      Match           @relation(fields: [matchId], references: [id])
-  outcome    Outcome?        @relation(fields: [outcomeId], references: [id])
+  bet         Bet             @relation(fields: [betId], references: [id], onDelete: Cascade)
+  match       Match           @relation(fields: [matchId], references: [id])
+  outcome     Outcome?        @relation(fields: [outcomeId], references: [id])
 
   @@index([betId])
   @@index([matchId])

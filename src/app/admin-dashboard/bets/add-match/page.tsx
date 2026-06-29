@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Check, X } from 'lucide-react';
+import { ChevronRight, Eye, Plus, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import countries from '@/lib/countries.json';
+import { toast } from 'sonner';
 
 const countryFlagMap = Object.fromEntries(
   countries.map((c: { name: string; flag: string }) => [c.name, c.flag])
@@ -22,31 +25,65 @@ type Match = {
   gameOddsTable: { homeTeamOdds: number | null; awayTeamOdds: number | null; drawOdds: number | null } | null;
 };
 
+type UpcomingGame = {
+  id: string;
+  sport_key: string;
+  sport_title: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+  matchId: string | null;
+  addToBetting: boolean;
+  inDb: boolean;
+};
+
 function formatDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', {
+  const dateStr = d.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const now = new Date();
+  const diff = d.getTime() - now.getTime();
+
+  if (diff <= 0) return dateStr;
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+
+  return `${dateStr} (in ${parts.join(' ')})`;
 }
 
 export default function AddMatchToBetPage() {
   const [activeBets, setActiveBets] = useState<Match[]>([]);
-  const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [fetching, setFetching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [addingToBet, setAddingToBet] = useState<Set<string>>(new Set());
+  const [expandedOdds, setExpandedOdds] = useState<Set<string>>(new Set());
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/betting-manage');
-      const data = await res.json();
-      setActiveBets(data.activeBets ?? []);
-      setUpcomingMatches(data.upcomingMatches ?? []);
+      const [bettingRes, gamesRes] = await Promise.all([
+        fetch('/api/admin/betting-manage'),
+        fetch('/api/admin/upcoming-games-list'),
+      ]);
+      const bettingData = await bettingRes.json();
+      const gamesData = await gamesRes.json();
+      setActiveBets(bettingData.activeBets ?? []);
+      setUpcomingMatches(Array.isArray(gamesData) ? gamesData : []);
     } catch {
     } finally {
       setLoading(false);
@@ -57,34 +94,7 @@ export default function AddMatchToBetPage() {
     fetchData();
   }, []);
 
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function handleEnable() {
-    if (selected.size === 0) return;
-    setSaving(true);
-    try {
-      await fetch('/api/admin/betting-manage', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchIds: Array.from(selected), addToBetting: true }),
-      });
-      setSelected(new Set());
-      await fetchData();
-    } catch {
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleRemove(id: string) {
-    setSaving(true);
     try {
       await fetch('/api/admin/betting-manage', {
         method: 'PUT',
@@ -93,12 +103,67 @@ export default function AddMatchToBetPage() {
       });
       await fetchData();
     } catch {
-    } finally {
-      setSaving(false);
     }
   }
 
-  const hasSelection = selected.size > 0;
+  async function handleFetchUpcomingGames() {
+    setFetching(true);
+    try {
+      const res = await fetch('/api/admin/fetch-upcoming-games', { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to fetch');
+        return;
+      }
+      await fetchData();
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  async function handleAddToBet(matchId: string) {
+    setAddingToBet((prev) => new Set(prev).add(matchId));
+    try {
+      await fetch('/api/admin/betting-manage', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchIds: [matchId], addToBetting: true }),
+      });
+      await fetchData();
+    } catch {
+    } finally {
+      setAddingToBet((prev) => { const next = new Set(prev); next.delete(matchId); return next; });
+    }
+  }
+
+  function toggleOddsExpand(id: string) {
+    setExpandedOdds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleRefreshToGames() {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/admin/refresh-to-games', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to refresh');
+        return;
+      }
+      toast.success(`Added ${data.created} games, ${data.skipped} already existed`);
+      await fetchData();
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-zinc-500">Loading...</div>;
@@ -125,6 +190,7 @@ export default function AddMatchToBetPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <th className="w-8 px-4 py-3"></th>
                   <th className="px-4 py-3">Match</th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3 text-right">Home</th>
@@ -138,28 +204,60 @@ export default function AddMatchToBetPage() {
                   const homeFlag = countryFlagMap[match.homeTeam as keyof typeof countryFlagMap];
                   const awayFlag = countryFlagMap[match.awayTeam as keyof typeof countryFlagMap];
                   const odds = match.gameOddsTable;
+                  const isOpen = expandedOdds.has(match.id);
                   return (
-                    <tr key={match.id} className="border-b border-zinc-100 last:border-0 hover:bg-green-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {homeFlag && <Image src={`/flags/${homeFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
-                          <span className="font-medium text-gray-800">{match.homeTeam}</span>
-                          <span className="text-xs text-zinc-400">v</span>
-                          {awayFlag && <Image src={`/flags/${awayFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
-                          <span className="font-medium text-gray-800">{match.awayTeam}</span>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{formatDate(match.kickoffTime)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.homeTeamOdds != null ? `×${odds.homeTeamOdds}` : '—'}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.drawOdds != null ? `×${odds.drawOdds}` : '—'}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.awayTeamOdds != null ? `×${odds.awayTeamOdds}` : '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Button variant="outline" size="xs" onClick={() => handleRemove(match.id)} disabled={saving}>
-                          <X className="size-3" />
-                          Remove
-                        </Button>
-                      </td>
-                    </tr>
+                    <Fragment key={match.id}>
+                      <tr className="border-b border-zinc-100 hover:bg-green-50 cursor-pointer" onClick={() => toggleOddsExpand(match.id)}>
+                        <td className="px-4 py-3">
+                          <ChevronRight className={`size-4 text-zinc-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {homeFlag && <Image src={`/flags/${homeFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
+                            <span className="font-medium text-gray-800">{match.homeTeam}</span>
+                            <span className="text-xs text-zinc-400">v</span>
+                            {awayFlag && <Image src={`/flags/${awayFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
+                            <span className="font-medium text-gray-800">{match.awayTeam}</span>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{formatDate(match.kickoffTime)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.homeTeamOdds != null ? `×${odds.homeTeamOdds}` : '—'}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.drawOdds != null ? `×${odds.drawOdds}` : '—'}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.awayTeamOdds != null ? `×${odds.awayTeamOdds}` : '—'}</td>
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="outline" size="xs" onClick={() => handleRemove(match.id)}>
+                            <X className="size-3" />
+                            Remove
+                          </Button>
+                        </td>
+                      </tr>
+                      <AnimatePresence>
+                        {isOpen && (
+                          <motion.tr
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <td colSpan={7} className="bg-zinc-50 px-4 py-3">
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex items-center gap-3"
+                              >
+                                <Link href={`/admin-dashboard/bets/games/${match.id}`}>
+                                  <Button size="sm" variant="outline">
+                                    <Eye className="size-3.5" />
+                                    Details
+                                  </Button>
+                                </Link>
+                              </motion.div>
+                            </td>
+                          </motion.tr>
+                        )}
+                      </AnimatePresence>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -174,70 +272,67 @@ export default function AddMatchToBetPage() {
           <h2 className="text-lg font-bold text-zinc-900">
             All Upcoming Matches ({upcomingMatches.length})
           </h2>
-          {hasSelection && (
-            <Button onClick={handleEnable} disabled={saving}>
-              <Check className="size-4" />
-              {saving ? 'Saving...' : `Enable Betting (${selected.size})`}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleFetchUpcomingGames} disabled={fetching}>
+              {fetching ? 'Fetching...' : 'Fetch Upcoming Games'}
             </Button>
-          )}
+            <Button onClick={handleRefreshToGames} disabled={refreshing}>
+              {refreshing ? 'Refreshing...' : 'Refresh them to games'}
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                <th className="w-10 px-4 py-3"></th>
                 <th className="px-4 py-3">Match</th>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Stage</th>
-                <th className="px-4 py-3 text-right">Home</th>
-                <th className="px-4 py-3 text-right">Draw</th>
-                <th className="px-4 py-3 text-right">Away</th>
-                <th className="px-4 py-3 text-center">Status</th>
+                <th className="px-4 py-3">Sport</th>
+                <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {upcomingMatches.map((match) => {
-                const homeFlag = countryFlagMap[match.homeTeam as keyof typeof countryFlagMap];
-                const awayFlag = countryFlagMap[match.awayTeam as keyof typeof countryFlagMap];
-                const odds = match.gameOddsTable;
-                const isActive = match.addToBetting;
+              {upcomingMatches.map((game) => {
+                const homeFlag = countryFlagMap[game.home_team as keyof typeof countryFlagMap];
+                const awayFlag = countryFlagMap[game.away_team as keyof typeof countryFlagMap];
+                const isAdding = addingToBet.has(game.matchId ?? '');
                 return (
-                  <tr
-                    key={match.id}
-                    className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 cursor-pointer ${isActive ? 'bg-green-50' : ''}`}
-                    onClick={() => !isActive && toggleSelect(match.id)}
-                  >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      {!isActive && (
-                        <input
-                          type="checkbox"
-                          checked={selected.has(match.id)}
-                          onChange={() => toggleSelect(match.id)}
-                          className="h-4 w-4 rounded border-zinc-300 text-primarycolor focus:ring-primarycolor"
-                        />
-                      )}
-                    </td>
+                  <tr key={game.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {homeFlag && <Image src={`/flags/${homeFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
-                        <span className="font-medium text-gray-800">{match.homeTeam}</span>
+                        <span className="font-medium text-gray-800">{game.home_team}</span>
                         <span className="text-xs text-zinc-400">v</span>
                         {awayFlag && <Image src={`/flags/${awayFlag}`} alt="" width={20} height={14} className="h-3.5 w-5 shrink-0 object-cover" />}
-                        <span className="font-medium text-gray-800">{match.awayTeam}</span>
+                        <span className="font-medium text-gray-800">{game.away_team}</span>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{formatDate(match.kickoffTime)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{match.stage}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.homeTeamOdds != null ? `×${odds.homeTeamOdds}` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.drawOdds != null ? `×${odds.drawOdds}` : '—'}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-800">{odds?.awayTeamOdds != null ? `×${odds.awayTeamOdds}` : '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{formatDate(game.commence_time)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{game.sport_title}</td>
                     <td className="px-4 py-3 text-center">
-                      {isActive ? (
-                        <span className="inline-block rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-semibold text-green-300">Active</span>
-                      ) : (
-                        <span className="inline-block rounded-full bg-zinc-600/40 px-2.5 py-0.5 text-xs font-semibold text-zinc-300">Off</span>
-                      )}
+                      <div className="flex items-center justify-center gap-2">
+                        {game.inDb && (
+                          <Link href={`/admin-dashboard/bets/games/${game.matchId}`}>
+                            <Button size="xs" variant="outline">
+                              <Eye className="size-3" />
+                              Details
+                            </Button>
+                          </Link>
+                        )}
+                        {game.inDb && !game.addToBetting && (
+                          <Button size="xs" onClick={() => handleAddToBet(game.matchId!)} disabled={isAdding}>
+                            <Plus className="size-3" />
+                            {isAdding ? 'Adding...' : 'Add to Bets'}
+                          </Button>
+                        )}
+                        {game.inDb && game.addToBetting && (
+                          <span className="inline-block rounded-full bg-green-900/40 px-2.5 py-0.5 text-xs font-semibold text-green-300">Active</span>
+                        )}
+                        {!game.inDb && (
+                          <span className="text-xs text-zinc-400">Not in DB</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -20,6 +20,17 @@ export async function GET() {
       gameOddsTable: {
         select: { homeTeamOdds: true, awayTeamOdds: true, drawOdds: true },
       },
+      marketOdds: {
+        select: {
+          id: true,
+          marketKey: true,
+          outcomeName: true,
+          point: true,
+          odds: true,
+          bookmakerKey: true,
+        },
+        orderBy: [{ marketKey: 'asc' }, { outcomeName: 'asc' }],
+      },
     },
   });
 

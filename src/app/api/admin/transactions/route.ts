@@ -59,6 +59,16 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: 'Transfer is not pending' }, { status: 400 });
       }
 
+      // Withdrawal (negative amount): just mark approved, balance already deducted
+      if (Number(transfer.amount) < 0) {
+        const updated = await prisma.moneyTransfers.update({
+          where: { id },
+          data: { status: 'APPROVED' },
+        });
+        return NextResponse.json(updated);
+      }
+
+      // Deposit (positive amount): add to balance
       const [updated] = await prisma.$transaction([
         prisma.moneyTransfers.update({
           where: { id },
@@ -71,6 +81,39 @@ export async function PUT(request: Request) {
       ]);
 
       return NextResponse.json(updated);
+    }
+
+    if (action === 'reject') {
+      const { id } = data as { id: string };
+      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+      const transfer = await prisma.moneyTransfers.findUnique({ where: { id } });
+      if (!transfer) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      if (transfer.status !== 'PENDING') {
+        return NextResponse.json({ error: 'Transfer is not pending' }, { status: 400 });
+      }
+
+      // Withdrawal rejection: refund the balance
+      if (Number(transfer.amount) < 0) {
+        await prisma.$transaction([
+          prisma.moneyTransfers.update({
+            where: { id },
+            data: { status: 'REJECTED' },
+          }),
+          prisma.user.update({
+            where: { id: transfer.userId },
+            data: { balance: { decrement: transfer.amount } }, // decrement a negative = increment
+          }),
+        ]);
+      } else {
+        // Deposit rejection: just mark rejected (no balance added yet)
+        await prisma.moneyTransfers.update({
+          where: { id },
+          data: { status: 'REJECTED' },
+        });
+      }
+
+      return NextResponse.json({ success: true });
     }
 
     if (action === 'edit') {

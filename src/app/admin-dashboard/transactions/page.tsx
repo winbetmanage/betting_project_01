@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Eye } from 'lucide-react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import {
   useReactTable,
@@ -124,7 +125,7 @@ export default function AdminTransactionsPage() {
       });
       if (!res.ok) {
         const d = await res.json();
-        alert(d.error || 'Failed to approve');
+        toast.error(d.error || 'Failed to approve');
         return;
       }
       setTransfers((prev) =>
@@ -132,10 +133,11 @@ export default function AdminTransactionsPage() {
           t.id === approveTarget.id ? { ...t, status: 'APPROVED' as TransferStatus } : t
         )
       );
+      toast.success('Transaction approved');
       setApproveOpen(false);
       setApproveTarget(null);
     } catch {
-      alert('Network error');
+      toast.error('Network error');
     } finally {
       setApproving(false);
     }

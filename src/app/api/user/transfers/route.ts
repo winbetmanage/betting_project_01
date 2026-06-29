@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
 
   const serialized = transfers.map((t) => ({
     ...t,
-    amount: Number(t.amount),
+    amount: Math.abs(Number(t.amount)),
+    direction: Number(t.amount) >= 0 ? 'deposit' : 'withdrawal',
   }));
 
   return NextResponse.json({ transfers: serialized, total, page, pageSize });

@@ -1,4 +1,5 @@
-import schedule from '@/lib/full_game_schedule2.json';
+import fs from 'fs';
+import path from 'path';
 import countries from '@/lib/countries.json';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -9,112 +10,24 @@ const countryFlagMap = Object.fromEntries(
   countries.map((c) => [c.name, c.flag])
 );
 
-const stageOrder = [
-  'Group Stage',
-  'Round of 32',
-  'Round of 16',
-  'Quarter-finals',
-  'Semi-finals',
-  'Third Place',
-  'Final',
-];
-
-const groupLabels = 'ABCDEFGHIJKL';
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00');
+function formatDate(iso: string) {
+  const d = new Date(iso);
   return d.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
-function MatchRow({ match }: { match: (typeof schedule)[number] }) {
-  const homeFlag = countryFlagMap[match.homeTeam as keyof typeof countryFlagMap];
-  const awayFlag = countryFlagMap[match.awayTeam as keyof typeof countryFlagMap];
-
-  return (
-    <Link href="/user-dashboard/games" className="block">
-      <div className="flex items-center gap-2 sm:gap-4 rounded-lg border border-zinc-200 bg-white px-3 py-3 sm:px-5 sm:py-4 text-secondarycolor shadow-sm transition hover:shadow-md cursor-pointer">
-        <div className="hidden min-w-[80px] text-xs text-zinc-500 sm:block">
-          {formatDate(match.date)}
-        </div>
-
-        <div className="flex flex-1 items-center gap-2 sm:gap-3">
-          <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row">
-            {homeFlag && (
-              <Image
-                src={`/flags/${homeFlag}`}
-                alt={match.homeTeam}
-                width={24}
-                height={16}
-                className="h-4 w-6 object-cover"
-              />
-            )}
-            <span className="truncate text-xs font-medium text-right sm:text-left sm:text-sm">
-              {match.homeTeam}
-            </span>
-          </div>
-
-          <span className="shrink-0 text-xs font-bold text-zinc-400">VS</span>
-
-          <div className="flex w-20 flex-col items-center gap-1 sm:w-28 sm:flex-row-reverse">
-            {awayFlag && (
-              <Image
-                src={`/flags/${awayFlag}`}
-                alt={match.awayTeam}
-                width={24}
-                height={16}
-                className="h-4 w-6 object-cover"
-              />
-            )}
-            <span className="truncate text-xs font-medium sm:text-sm">
-              {match.awayTeam}
-            </span>
-          </div>
-        </div>
-
-        <div className="hidden text-right text-xs text-zinc-500 md:block">
-          <div>{match.timeLocal}</div>
-          <div className="text-zinc-400">{match.stadium}</div>
-        </div>
-
-        <div className="block text-right text-xs text-zinc-500 md:hidden">
-          <div>{formatDate(match.date)}</div>
-          <div>{match.timeLocal}</div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function GroupSection({
-  label,
-  matches,
-}: {
-  label: string;
-  matches: (typeof schedule)[number][];
-}) {
-  if (matches.length === 0) return null;
-  return (
-    <div>
-      <h3 className="mb-3 text-base font-semibold text-zinc-200">{label}</h3>
-      <div className="space-y-2">
-        {matches.map((m) => (
-          <MatchRow key={m.matchId} match={m} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function UserDashboard() {
-  const grouped: Record<string, (typeof schedule)[number][]> = {};
-  for (const match of schedule) {
-    const key = match.stage;
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(match);
+  const filePath = path.join(process.cwd(), 'src', 'lib', 'upcominggameslist.json');
+  let games: any[] = [];
+  if (fs.existsSync(filePath)) {
+    try {
+      games = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch {}
   }
 
   return (
@@ -124,83 +37,54 @@ export default function UserDashboard() {
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-8 sm:mb-12">
           <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            2026 World Cup Schedule
+            Upcoming Games
           </h1>
           <p className="mt-1 text-sm text-zinc-400 sm:text-base">
-            104 matches across 16 venues in USA, Canada &amp; Mexico
+            {games.length} match{games.length !== 1 ? 'es' : ''} coming soon
           </p>
         </div>
 
-        <div className="space-y-10">
-          {stageOrder.map((stage) => {
-            const stageMatches = grouped[stage];
-            if (!stageMatches) return null;
+        <Link
+          href="/user-dashboard/games"
+          className="mb-8 block w-full rounded-xl bg-primarycolor px-6 py-4 text-center text-lg font-bold text-white transition hover:brightness-90"
+        >
+          Start Betting
+        </Link>
 
-            if (stage === 'Group Stage') {
+        {games.length === 0 ? (
+          <div className="rounded-xl border border-zinc-700 bg-zinc-800/50 p-12 text-center">
+            <p className="text-zinc-400">No upcoming games at the moment.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {games.map((game) => {
+              const homeFlag = countryFlagMap[game.home_team as keyof typeof countryFlagMap];
+              const awayFlag = countryFlagMap[game.away_team as keyof typeof countryFlagMap];
               return (
-                <section key={stage}>
-                  <Link
-                    href="/user-dashboard/games"
-                    className="mb-6 block w-full rounded-xl bg-primarycolor px-6 py-4 text-center text-lg font-bold text-white transition hover:brightness-90"
-                  >
-                    Start Betting
-                  </Link>
-                  <h2 className="mb-5 text-xl font-bold text-white">
-                    {stage}
-                  </h2>
-                  <div className="space-y-8">
-                    {groupLabels.split('').map((letter) => {
-                      const groupMatches = stageMatches.filter(
-                        (m) => m.group === letter
-                      );
-                      if (letter === 'A') {
-                        return (
-                          <div key={letter} className="grid gap-6 lg:grid-cols-3">
-                            <div className="lg:col-span-2">
-                              <GroupSection
-                                label={`Group ${letter}`}
-                                matches={groupMatches}
-                              />
-                            </div>
-                            <div>
-                              <div className="w-full rounded-xl lg:sticky lg:top-20">
-                                <img
-                                  src="/images/winbetting.png"
-                                  alt="WinBet"
-                                  className="w-full rounded-xl"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-                      return (
-                        <GroupSection
-                          key={letter}
-                          label={`Group ${letter}`}
-                          matches={groupMatches}
-                        />
-                      );
-                    })}
+                <Link
+                  key={game.id}
+                  href="/user-dashboard/games"
+                  className="block rounded-xl border border-zinc-700 bg-zinc-800/50 p-5 transition hover:border-primarycolor/50 hover:shadow-lg"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {homeFlag && <Image src={`/flags/${homeFlag}`} alt="" width={24} height={16} className="h-4 w-6 shrink-0 object-cover" />}
+                      <span className="truncate text-sm font-semibold text-white">{game.home_team}</span>
+                    </div>
+                    <span className="shrink-0 text-xs font-bold text-zinc-500">VS</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="truncate text-sm font-semibold text-white">{game.away_team}</span>
+                      {awayFlag && <Image src={`/flags/${awayFlag}`} alt="" width={24} height={16} className="h-4 w-6 shrink-0 object-cover" />}
+                    </div>
                   </div>
-                </section>
+                  <div className="text-center text-xs text-zinc-400">
+                    {formatDate(game.commence_time)}
+                  </div>
+                </Link>
               );
-            }
-
-            return (
-              <section key={stage}>
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  {stage}
-                </h2>
-                <div className="space-y-2">
-                  {stageMatches.map((m) => (
-                    <MatchRow key={m.matchId} match={m} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </main>
     </>
   );
