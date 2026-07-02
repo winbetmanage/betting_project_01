@@ -80,53 +80,68 @@ export async function PUT(request: Request) {
         }),
       ]);
 
-      // Referral bonus (outside main transaction — failure won't block approval)
-      if (Number(transfer.amount) >= 20) {
-        try {
-          const depositingUser = await prisma.user.findUnique({
-            where: { id: transfer.userId },
-            select: { referrer: true, referral_sent: true, username: true },
-          });
+      // Referral bonus logic (outside main transaction — failure won't block approval)
+      try {
+        const depositingUser = await prisma.user.findUnique({
+          where: { id: transfer.userId },
+          select: { referrer: true, referral_sent: true, username: true },
+        });
 
-          if (depositingUser?.referrer && !depositingUser.referral_sent) {
-            const referrerUser = await prisma.user.findUnique({
-              where: { username: depositingUser.referrer },
-            });
-
-            if (referrerUser) {
-              const referralSetting = await prisma.setting.findUnique({
-                where: { key: 'referral_link_gift_value' },
+        if (depositingUser) {
+          if (depositingUser.referral_sent) {
+            // Already rewarded — nothing to do
+          } else if (Number(transfer.amount) < 20) {
+            // Below threshold — don't touch referral_sent
+          } else {
+            // Amount >= 20 and referral_sent is false
+            if (!depositingUser.referrer) {
+              // No referrer — just mark referral_sent so it's not checked again
+              await prisma.user.update({
+                where: { id: transfer.userId },
+                data: { referral_sent: true },
+              });
+            } else {
+              // Has a referrer username — look up the user and reward
+              const referrerUser = await prisma.user.findFirst({
+                where: { username: depositingUser.referrer },
               });
 
-              if (referralSetting) {
-                const bonusValue = Number((referralSetting.value as { value?: number }).value ?? 0);
-                if (bonusValue > 0) {
-                  await prisma.$transaction([
-                    prisma.user.update({
-                      where: { id: referrerUser.id },
-                      data: { balance: { increment: bonusValue } },
-                    }),
-                    prisma.moneyTransfers.create({
-                      data: {
-                        userId: referrerUser.id,
-                        amount: bonusValue,
-                        type: 'TELE_BIRR',
-                        status: 'APPROVED',
-                        reason: `Referral bonus from ${depositingUser.username}`,
-                      },
-                    }),
-                    prisma.user.update({
-                      where: { id: transfer.userId },
-                      data: { referral_sent: true },
-                    }),
-                  ]);
+              if (referrerUser) {
+                const referralSetting = await prisma.setting.findUnique({
+                  where: { key: 'referral_link_gift_value' },
+                });
+
+                if (referralSetting) {
+                  const bonusValue = Number((referralSetting.value as { value?: number }).value ?? 0);
+                  if (bonusValue > 0) {
+                    await prisma.$transaction([
+                      prisma.user.update({
+                        where: { id: referrerUser.id },
+                        data: { balance: { increment: bonusValue } },
+                      }),
+                      prisma.moneyTransfers.create({
+                        data: {
+                          userId: referrerUser.id,
+                          amount: bonusValue,
+                          type: 'TELE_BIRR',
+                          status: 'APPROVED',
+                          reason: `Referral bonus from ${depositingUser.username}`,
+                        },
+                      }),
+                    ]);
+                  }
                 }
               }
+
+              await prisma.user.update({
+                where: { id: transfer.userId },
+                data: { referral_sent: true },
+              });
             }
           }
-        } catch {
-          // Referral bonus failed — deposit still went through, just log it
         }
+      } catch {
+        // Referral bonus failed — deposit still went through
       }
 
       return NextResponse.json(updated);
