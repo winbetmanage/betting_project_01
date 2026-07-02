@@ -8,7 +8,6 @@ import { ChevronRight, Eye, Plus, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import countries from '@/lib/countries.json';
 import { toast } from 'sonner';
-import { FetchGameScores } from '@/lib/api_links';
 
 const countryFlagMap = Object.fromEntries(
   countries.map((c: { name: string; flag: string }) => [c.name, c.flag])
@@ -170,17 +169,20 @@ export default function AddMatchToBetPage() {
   async function handleCheckStatus(gameId: string, homeTeam: string, awayTeam: string) {
     setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: true, completed: null } }));
     try {
-      const url = FetchGameScores(gameId);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const res = await fetch('/api/admin/check-game-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: gameId, homeTeam, awayTeam }),
+      });
       const data = await res.json();
-      const game = Array.isArray(data) ? data.find(
-        (g: any) => g.home_team === homeTeam && g.away_team === awayTeam,
-      ) : null;
-      const completed = game?.completed === true;
-      if (completed) {
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to check status');
+        setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: false, completed: null } }));
+        return;
+      }
+      if (data.completed) {
         setUpcomingMatches((prev) => prev.filter((g) => g.id !== gameId));
-        toast.info(`${homeTeam} vs ${awayTeam} is completed and removed from the list`);
+        toast.success(`${homeTeam} ${data.homeScore} - ${data.awayScore} ${awayTeam} — completed`);
       } else {
         setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: false, completed: false } }));
         toast.info(`${homeTeam} vs ${awayTeam} is not yet completed`);

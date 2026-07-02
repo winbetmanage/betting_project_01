@@ -1,13 +1,5 @@
 [
   {
-    "id": "9eeb4876001f5a52ce3c3641bd5f1f2f",
-    "sport_key": "soccer_fifa_world_cup",
-    "sport_title": "FIFA World Cup",
-    "commence_time": "2026-07-02T00:00:00Z",
-    "home_team": "USA",
-    "away_team": "Bosnia & Herzegovina"
-  },
-  {
     "id": "a518ac20df8f5c732b881e213ae0c230",
     "sport_key": "soccer_fifa_world_cup",
     "sport_title": "FIFA World Cup",
@@ -86,5 +78,13 @@
     "commence_time": "2026-07-06T00:00:00Z",
     "home_team": "Mexico",
     "away_team": "England"
+  },
+  {
+    "id": "810f80b3ae79f5e86b3747ca15718ed8",
+    "sport_key": "soccer_fifa_world_cup",
+    "sport_title": "FIFA World Cup",
+    "commence_time": "2026-07-07T00:00:00Z",
+    "home_team": "USA",
+    "away_team": "Belgium"
   }
 ]
