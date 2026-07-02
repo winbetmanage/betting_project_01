@@ -430,7 +430,11 @@ export default function GamesPage() {
 
   const fetchMyBets = async () => {
     setBetsLoading(true);
-    try { const r = await fetch('/api/bets/my'); setMyBets(await r.json()); } catch { } finally { setBetsLoading(false); }
+    try {
+      const r = await fetch('/api/bets/my');
+      const data = await r.json();
+      setMyBets(Array.isArray(data) ? data : []);
+    } catch { setMyBets([]); } finally { setBetsLoading(false); }
   };
 
   useEffect(() => {
@@ -558,16 +562,89 @@ export default function GamesPage() {
           </div>
         )}
 
-        <div className="mt-8">
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Target className="size-5 text-primarycolor" />My Bets</h2>
-          {betsLoading ? (
-            <div className="flex items-center justify-center py-12 text-zinc-500">Loading...</div>
-          ) : myBets.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">You haven't placed any bets yet</div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">{myBets.map((bet) => <BetCard key={bet.id} bet={bet} />)}</div>
-          )}
-        </div>
+        {(() => {
+          const activeBets = myBets.filter((b) => b.status === 'PENDING');
+          const completedBets = myBets.filter((b) => b.status !== 'PENDING');
+          return (
+            <>
+              <div className="mt-8">
+                <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Target className="size-5 text-primarycolor" />Active Bets</h2>
+                {betsLoading ? (
+                  <div className="flex items-center justify-center py-12 text-zinc-500">Loading...</div>
+                ) : activeBets.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">No active bets</div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">{activeBets.map((bet) => <BetCard key={bet.id} bet={bet} />)}</div>
+                )}
+              </div>
+
+              <div className="mt-8">
+                <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-white"><Target className="size-5 text-zinc-500" />Completed Bets</h2>
+                {betsLoading ? (
+                  <div className="flex items-center justify-center py-12 text-zinc-500">Loading...</div>
+                ) : completedBets.length === 0 ? (
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">No completed bets yet</div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {completedBets.map((bet) => {
+                      const isParlay = !bet.matchId && bet.selections && bet.selections.length > 0;
+                      const singleSel = !isParlay && bet.selections?.[0] ? bet.selections[0] : null;
+                      return (
+                        <div key={bet.id} className={`rounded-xl border border-zinc-800 bg-zinc-900/80 border-l-4 ${statusStyles[bet.status] || 'border-l-zinc-700'} p-4 shadow-sm`}>
+                          <div className="mb-2 flex items-start justify-between">
+                            <div className="min-w-0 flex-1">
+                              {isParlay ? (
+                                <p className="text-sm font-medium text-zinc-200">Parlay ({bet.selections.length} legs)</p>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-medium text-zinc-200">
+                                    {bet.match ? `${bet.match.homeTeam} vs ${bet.match.awayTeam}` : ''}
+                                  </p>
+                                  {singleSel && (
+                                    <p className="mt-0.5 text-xs text-zinc-400">
+                                      {marketLabel(singleSel.marketKey || 'h2h', singleSel.outcomeName || bet.typeofBet || '', singleSel.point ? Number(singleSel.point) : null, bet.match?.homeTeam, bet.match?.awayTeam)}
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                              <p className="mt-0.5 text-xs text-zinc-500">
+                                <Clock className="mr-1 inline-block size-3" />
+                                {new Date(bet.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            {bet.status === 'WON' ? (
+                              <span className="shrink-0 text-sm font-bold text-green-400">+ETB {Number(bet.potentialPayout).toFixed(2)}</span>
+                            ) : bet.status === 'LOST' ? (
+                              <span className="shrink-0 text-xs font-semibold text-red-400">Lost</span>
+                            ) : (
+                              <span className="shrink-0 text-xs font-semibold text-zinc-500">Voided</span>
+                            )}
+                          </div>
+                          {isParlay && bet.selections.map((sel) => {
+                            const matchName = [sel.match?.homeTeam, sel.match?.awayTeam].filter(Boolean).join(' v ') || '';
+                            return (
+                              <div key={sel.id} className="mb-1.5 flex items-start justify-between gap-2 text-xs text-zinc-500 last:mb-2">
+                                <div className="min-w-0 flex-1">
+                                  {matchName && <span className="block truncate text-zinc-400 font-medium">{matchName}</span>}
+                                  <span className="block truncate">{marketLabel(sel.marketKey || 'h2h', sel.outcomeName || sel.typeofBet, sel.point ? Number(sel.point) : null, sel.match?.homeTeam, sel.match?.awayTeam)}</span>
+                                </div>
+                                <span className="shrink-0 text-zinc-400">@ {Number(sel.oddsAtBet).toFixed(2)}</span>
+                              </div>
+                            );
+                          })}
+                          <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-zinc-800">
+                            <span className="text-zinc-500">Stake: <span className="font-medium text-zinc-300">ETB {Number(bet.stake).toFixed(2)}</span></span>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${statusColors[bet.status]}`}>{statusLabels[bet.status]}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
       </main>
     </>
   );

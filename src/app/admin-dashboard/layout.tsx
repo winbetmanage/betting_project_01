@@ -19,7 +19,7 @@ import {
   SidebarTrigger,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { Home, Swords, WalletCards, Ticket, Users, UserCircle, LogOut, Eye, ChevronDown, ArrowLeftRight } from 'lucide-react';
+import { Home, Swords, WalletCards, Ticket, Users, UserCircle, LogOut, Eye, ChevronDown, ArrowLeftRight, Settings, Shield } from 'lucide-react';
 import { Toaster } from 'sonner';
 
 const adminLinks = [
@@ -30,6 +30,7 @@ const adminLinks = [
   { href: '/admin-dashboard/transactions', label: 'Transactions', icon: ArrowLeftRight },
   { href: '/admin-dashboard/users', label: 'Users', icon: Users },
   { href: '/admin-dashboard/profile', label: 'Profile', icon: UserCircle },
+  { href: '/admin-dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function AdminLayout({
@@ -44,6 +45,7 @@ export default function AdminLayout({
   const [betsOpen, setBetsOpen] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [adminUser, setAdminUser] = useState<{ username: string; email: string } | null>(null);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -53,6 +55,7 @@ export default function AdminLayout({
           router.push('/login');
         } else {
           setAuthorized(true);
+          setAdminUser({ username: data.username, email: data.email });
         }
       })
       .catch(() => router.push('/login'));
@@ -291,6 +294,24 @@ export default function AdminLayout({
           <span className="text-sm font-medium text-zinc-600">
             {pathname === '/admin-dashboard/fetched-matches' ? 'Feched Matchs' : pathname === '/admin-dashboard/bets/games' ? 'Games' : pathname === '/admin-dashboard/markets/market-odds' ? 'Market Odds' : pathname === '/admin-dashboard/markets/manage-market-types' ? 'Manage Market Types' : adminLinks.find((l) => l.href === pathname)?.label || pathname.startsWith('/admin-dashboard/bets') ? 'Bets' : pathname.startsWith('/admin-dashboard/markets') ? 'Markets' : pathname.startsWith('/admin-dashboard/matches') ? 'Matches' : 'Home'}
           </span>
+          <div className="ml-auto flex items-center gap-3">
+            {adminUser && (
+              <>
+                <div className="flex items-center gap-1.5 text-sm text-zinc-600">
+                  <Shield className="size-4 text-purple-600" />
+                  <span className="font-medium">{adminUser.username}</span>
+                  <span className="text-xs text-zinc-400">(Admin)</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 transition hover:bg-zinc-100 hover:text-red-600"
+                >
+                  <LogOut className="size-3.5" />
+                  Logout
+                </button>
+              </>
+            )}
+          </div>
         </header>
         <div className="p-6">{children}</div>
         <Toaster

@@ -4,10 +4,11 @@ import { Fragment, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, Eye, Plus, X } from 'lucide-react';
+import { ChevronRight, Eye, Plus, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import countries from '@/lib/countries.json';
 import { toast } from 'sonner';
+import { FetchGameScores } from '@/lib/api_links';
 
 const countryFlagMap = Object.fromEntries(
   countries.map((c: { name: string; flag: string }) => [c.name, c.flag])
@@ -72,6 +73,7 @@ export default function AddMatchToBetPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [addingToBet, setAddingToBet] = useState<Set<string>>(new Set());
   const [expandedOdds, setExpandedOdds] = useState<Set<string>>(new Set());
+  const [gameStatuses, setGameStatuses] = useState<Record<string, { checking: boolean; completed: boolean | null }>>({});
 
   const fetchData = async () => {
     setLoading(true);
@@ -162,6 +164,30 @@ export default function AddMatchToBetPage() {
       toast.error('Something went wrong');
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleCheckStatus(gameId: string, homeTeam: string, awayTeam: string) {
+    setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: true, completed: null } }));
+    try {
+      const url = FetchGameScores(gameId);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const game = Array.isArray(data) ? data.find(
+        (g: any) => g.home_team === homeTeam && g.away_team === awayTeam,
+      ) : null;
+      const completed = game?.completed === true;
+      if (completed) {
+        setUpcomingMatches((prev) => prev.filter((g) => g.id !== gameId));
+        toast.info(`${homeTeam} vs ${awayTeam} is completed and removed from the list`);
+      } else {
+        setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: false, completed: false } }));
+        toast.info(`${homeTeam} vs ${awayTeam} is not yet completed`);
+      }
+    } catch {
+      setGameStatuses((prev) => ({ ...prev, [gameId]: { checking: false, completed: null } }));
+      toast.error('Failed to check game status');
     }
   }
 
@@ -289,6 +315,7 @@ export default function AddMatchToBetPage() {
                 <th className="px-4 py-3">Match</th>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Sport</th>
+                <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -310,6 +337,23 @@ export default function AddMatchToBetPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{formatDate(game.commence_time)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-zinc-500">{game.sport_title}</td>
+                    <td className="px-4 py-3 text-center">
+                      {gameStatuses[game.id]?.checking ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-zinc-400">
+                          <RefreshCw className="size-3 animate-spin" />
+                          Checking...
+                        </span>
+                      ) : gameStatuses[game.id]?.completed === false ? (
+                        <span className="text-xs text-amber-500">
+                          Not completed{new Date(game.commence_time) < new Date() ? ' (Live)' : ''}
+                        </span>
+                      ) : (
+                        <Button size="xs" variant="outline" onClick={() => handleCheckStatus(game.id, game.home_team, game.away_team)}>
+                          <RefreshCw className="size-3" />
+                          Check Status
+                        </Button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         {game.inDb && (

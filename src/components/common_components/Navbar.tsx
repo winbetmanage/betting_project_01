@@ -11,7 +11,7 @@ const navLinks = [
   { href: '/user-dashboard', label: 'Home' },
   { href: '/user-dashboard/games', label: 'Games' },
   { href: '/user-dashboard/balance', label: 'Balance' },
-  { href: '/profile', label: 'Profile' },
+  { href: '/user-dashboard/profile', label: 'Profile' },
 ];
 
 const sidebar = {

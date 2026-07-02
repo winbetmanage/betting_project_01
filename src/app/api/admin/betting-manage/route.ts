@@ -19,6 +19,7 @@ export async function GET() {
       stage: true,
       status: true,
       addToBetting: true,
+      settled: true,
       gameOddsTable: {
         select: { homeTeamOdds: true, awayTeamOdds: true, drawOdds: true },
       },
@@ -46,8 +47,9 @@ export async function GET() {
   const now = new Date();
   const activeBets = matches.filter((m) => m.addToBetting && new Date(m.kickoffTime) > now);
   const upcomingMatches = matches.filter((m) => new Date(m.kickoffTime) > now);
+  const completedBets = matches.filter((m) => new Date(m.kickoffTime) <= now && (m.addToBetting || m.bets.length > 0));
 
-  return NextResponse.json({ activeBets, upcomingMatches });
+  return NextResponse.json({ activeBets, upcomingMatches, completedBets });
 }
 
 export async function PUT(request: NextRequest) {

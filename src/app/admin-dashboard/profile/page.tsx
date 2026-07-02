@@ -25,6 +25,8 @@ export default function AdminProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState('');
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -41,10 +43,20 @@ export default function AdminProfilePage() {
 
   useEffect(() => {
     fetch('/api/admin/profile')
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((d) => { throw new Error(d.errors?.form?.[0] || 'Failed to load profile'); });
+        }
+        return r.json();
+      })
       .then((data) => {
         setProfile(data);
         setForm({ name: data.name, email: data.email, username: data.username });
+        setProfileLoading(false);
+      })
+      .catch((err) => {
+        setProfileError(err.message || 'Failed to load profile');
+        setProfileLoading(false);
       });
   }, []);
 
@@ -103,8 +115,19 @@ export default function AdminProfilePage() {
     setTimeout(() => setPwSuccess(''), 3000);
   }
 
-  if (!profile.name) {
-    return <div className="text-zinc-500">Loading...</div>;
+  if (profileLoading) {
+    return <div className="flex items-center justify-center py-20 text-zinc-500">Loading...</div>;
+  }
+
+  if (profileError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-zinc-900">Admin Profile</h1>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-600">
+          {profileError}
+        </div>
+      </div>
+    );
   }
 
   return (

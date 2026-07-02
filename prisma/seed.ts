@@ -272,6 +272,15 @@ async function main() {
   }
   console.log(`  ${marketTypes.length} market types upserted.`);
 
+  // Settings
+  console.log('Seeding settings...');
+  await prisma.setting.upsert({
+    where: { key: 'Referral_Payment' },
+    update: { value: { value: 50 }, type: 'NUMBER', label: 'Referral Payment', group: 'payment' },
+    create: { key: 'Referral_Payment', value: { value: 50 }, type: 'NUMBER', label: 'Referral Payment', group: 'payment' },
+  });
+  console.log('  Referral_Payment = 50');
+
   console.log('Seed complete.');
 }
 

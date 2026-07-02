@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -11,9 +11,18 @@ export default function SignupPage() {
     username: '',
     password: '',
     confirmPassword: '',
+    referrerUsername: '',
   });
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      setForm((f) => ({ ...f, referrerUsername: ref }));
+    }
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -44,6 +53,9 @@ export default function SignupPage() {
           email: form.email,
           username: form.username,
           password: form.password,
+          ...(form.referrerUsername.trim()
+            ? { referrerUsername: form.referrerUsername.trim() }
+            : {}),
         }),
       });
 
@@ -169,6 +181,30 @@ export default function SignupPage() {
               {errors.confirmPassword && (
                 <p className="mt-1 text-xs text-red-400">
                   {errors.confirmPassword[0]}
+                </p>
+              )}
+            </div>
+
+            <div className="border-t border-zinc-800 pt-4">
+              <label
+                htmlFor="referrerUsername"
+                className="block text-sm font-medium text-zinc-400"
+              >
+                Referral username (optional)
+              </label>
+              <input
+                id="referrerUsername"
+                type="text"
+                placeholder="Who referred you?"
+                value={form.referrerUsername}
+                onChange={(e) =>
+                  setForm({ ...form, referrerUsername: e.target.value })
+                }
+                className="mt-1 block w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-primarycolor focus:outline-none focus:ring-1 focus:ring-primarycolor"
+              />
+              {errors.referrerUsername && (
+                <p className="mt-1 text-xs text-red-400">
+                  {errors.referrerUsername[0]}
                 </p>
               )}
             </div>

@@ -80,6 +80,55 @@ export async function PUT(request: Request) {
         }),
       ]);
 
+      // Referral bonus (outside main transaction — failure won't block approval)
+      if (Number(transfer.amount) >= 20) {
+        try {
+          const depositingUser = await prisma.user.findUnique({
+            where: { id: transfer.userId },
+            select: { referrer: true, referral_sent: true, username: true },
+          });
+
+          if (depositingUser?.referrer && !depositingUser.referral_sent) {
+            const referrerUser = await prisma.user.findUnique({
+              where: { username: depositingUser.referrer },
+            });
+
+            if (referrerUser) {
+              const referralSetting = await prisma.setting.findUnique({
+                where: { key: 'referral_link_gift_value' },
+              });
+
+              if (referralSetting) {
+                const bonusValue = Number((referralSetting.value as { value?: number }).value ?? 0);
+                if (bonusValue > 0) {
+                  await prisma.$transaction([
+                    prisma.user.update({
+                      where: { id: referrerUser.id },
+                      data: { balance: { increment: bonusValue } },
+                    }),
+                    prisma.moneyTransfers.create({
+                      data: {
+                        userId: referrerUser.id,
+                        amount: bonusValue,
+                        type: 'TELE_BIRR',
+                        status: 'APPROVED',
+                        reason: `Referral bonus from ${depositingUser.username}`,
+                      },
+                    }),
+                    prisma.user.update({
+                      where: { id: transfer.userId },
+                      data: { referral_sent: true },
+                    }),
+                  ]);
+                }
+              }
+            }
+          }
+        } catch {
+          // Referral bonus failed — deposit still went through, just log it
+        }
+      }
+
       return NextResponse.json(updated);
     }
 

@@ -7,6 +7,7 @@ const signupSchema = z.object({
   email: z.string().email('Invalid email address'),
   username: z.string().min(3, 'Username must be at least 3 characters').max(30),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  referrerUsername: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    const { email, username, password } = parsed.data;
+    const { email, username, password, referrerUsername } = parsed.data;
 
     const existingUser = await prisma.user.findFirst({
       where: { OR: [{ email }, { username }] },
@@ -33,14 +34,32 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate referrer username exists if provided
+    if (referrerUsername) {
+      const referrerUser = await prisma.user.findUnique({
+        where: { username: referrerUsername },
+      });
+      if (!referrerUser) {
+        return NextResponse.json(
+          { errors: { referrerUsername: ['Referral username not found'] } },
+          { status: 400 }
+        );
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
-      data: { email, username, password: hashedPassword },
+      data: {
+        email,
+        username,
+        password: hashedPassword,
+        ...(referrerUsername ? { referrer: referrerUsername } : {}),
+      },
     });
 
     return NextResponse.json(
-      { id: user.id, email: user.email, username: user.username },
+      { id: user.id, email: user.email, username: user.username, referrer: user.referrer },
       { status: 201 }
     );
   } catch {

@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Navbar from '@/components/common_components/Navbar';
 
 type User = { id: string; email: string; username: string; affiliate_link?: string };
 
-export default function ProfilePage() {
+export default function UserProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -42,7 +41,7 @@ export default function ProfilePage() {
     router.push('/login');
   }
 
-  async function handleInvite() {
+  async function handleCopy() {
     if (!user?.username) return;
     const link = `${process.env.NEXT_PUBLIC_HOME_LINK}/signup?ref=${user.username}`;
     try {
@@ -50,7 +49,6 @@ export default function ProfilePage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
       const textarea = document.createElement('textarea');
       textarea.value = link;
       document.body.appendChild(textarea);
@@ -119,7 +117,7 @@ export default function ProfilePage() {
                 className="flex-1 truncate rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-300"
               />
               <button
-                onClick={handleInvite}
+                onClick={handleCopy}
                 className="shrink-0 rounded-lg bg-primarycolor px-3 py-2 text-xs font-medium text-white transition hover:brightness-90"
               >
                 {copied ? 'Copied!' : 'Copy'}
@@ -128,12 +126,12 @@ export default function ProfilePage() {
           </div>
 
           <div className="mt-4 flex gap-3">
-            <Link
-              href="/user-dashboard"
+            <button
+              onClick={() => router.push('/user-dashboard')}
               className="flex-1 rounded-lg border border-zinc-700 px-4 py-2.5 text-center text-sm font-medium text-zinc-300 transition hover:bg-zinc-800"
             >
-              Back to Games
-            </Link>
+              Back to Home
+            </button>
             <button
               onClick={handleLogout}
               disabled={loggingOut}

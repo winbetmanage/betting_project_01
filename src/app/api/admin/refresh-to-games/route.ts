@@ -35,6 +35,7 @@ export async function POST() {
 
     const gameEntries = games.map((g: any) => ({
       apiMatchId: hashCode(g.id),
+      apiEventId: g.id,
       homeTeam: g.home_team,
       awayTeam: g.away_team,
       kickoffTime: new Date(g.commence_time),
@@ -62,6 +63,17 @@ export async function POST() {
     for (const entry of toCreate) {
       await prisma.match.create({ data: entry });
       created++;
+    }
+
+    // Backfill apiEventId for existing matches that are missing it
+    const needsBackfill = unique.filter((e) => existingSet.has(e.apiMatchId));
+    let backfilled = 0;
+    for (const entry of needsBackfill) {
+      const result = await prisma.match.updateMany({
+        where: { apiMatchId: entry.apiMatchId, apiEventId: null },
+        data: { apiEventId: entry.apiEventId },
+      });
+      backfilled += result.count;
     }
 
     const skipped = games.length - created;

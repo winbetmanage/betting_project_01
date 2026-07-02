@@ -6,3 +6,7 @@ export const FetchUpcomingGamesList ="https://api.the-odds-api.com/v4/sports/soc
 export function FetchDetailOddsOfAGame(eventId: string) {
   return `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/events/${eventId}/odds?apiKey=c7c832c4ee32c7396dc7816848e588a6&regions=us,uk,eu&markets=h2h,spreads,totals,btts,draw_no_bet,double_chance,h2h_h1,h2h_h2,spreads_h1,totals_h1,alternate_spreads,alternate_totals`;
 }
+
+export function FetchGameScores(eventId: string) {
+  return `https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/scores/?apiKey=c7c832c4ee32c7396dc7816848e588a6&eventIds=${eventId}&daysFrom=3&dateFormat=iso`;
+}

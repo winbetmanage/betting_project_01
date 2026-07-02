@@ -7,6 +7,9 @@ import path from 'path';
 import { FetchOddsButton } from './fetch-odds-button';
 import { MarketSections } from './market-sections';
 import { ToggleBettingButton } from './toggle-betting-button';
+import { FetchScoreButton } from './fetch-score-button';
+import { FetchGameScores } from '@/lib/api_links';
+import { findOddsEventId } from '@/lib/odds-helper';
 
 const countryFlagMap = Object.fromEntries(
   countries.map((c) => [c.name, c.flag])
@@ -58,14 +61,66 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
   if (!match) notFound();
 
-  const oddsFile = path.join(process.cwd(), 'src', 'lib', 'game_odd_details', `${match.apiMatchId}.json`);
+  // Auto-fetch scores from Odds API if match has ended but no scores recorded yet
+  if (match.homeScore == null && match.awayScore == null && new Date(match.kickoffTime) <= new Date()) {
+    const eventId = match.apiEventId || findOddsEventId(match.homeTeam, match.awayTeam);
+    if (eventId) {
+      try {
+        const url = FetchGameScores(eventId);
+        const res = await fetch(url, { next: { revalidate: 60 } });
+        if (res.ok) {
+          const data = await res.json();
+          const game = Array.isArray(data)
+            ? data.find((g: any) => g.home_team === match.homeTeam && g.away_team === match.awayTeam)
+            : null;
+          if (game?.completed === true) {
+            const hScore = game.scores?.find((s: any) => s.name === match.homeTeam)?.score;
+            const aScore = game.scores?.find((s: any) => s.name === match.awayTeam)?.score;
+            if (hScore != null && aScore != null) {
+              await prisma.match.update({
+                where: { id },
+                data: {
+                  homeScore: Number(hScore),
+                  awayScore: Number(aScore),
+                  status: 'FINISHED',
+                },
+              });
+            }
+          }
+        }
+      } catch {
+        // Silently continue if Odds API fetch fails
+      }
+    }
+  }
+
+  // Re-fetch match to get updated scores
+  const matchAfter = await prisma.match.findUnique({
+    where: { id },
+    include: {
+      gameOddsTable: true,
+      marketOdds: { orderBy: [{ marketKey: 'asc' }, { outcomeName: 'asc' }] },
+      _count: { select: { bets: true } },
+      h2hRecords: true,
+      bttsRecords: true,
+      totalsRecords: true,
+      doubleChanceRecords: true,
+      noBetRecords: true,
+      spreadRecords: true,
+    },
+  });
+
+  if (!matchAfter) notFound();
+  const m = matchAfter;
+
+  const oddsFile = path.join(process.cwd(), 'src', 'lib', 'game_odd_details', `${m.apiMatchId}.json`);
   const hasExistingOddsFile = fs.existsSync(oddsFile);
 
-  const homeFlag = countryFlagMap[match.homeTeam as keyof typeof countryFlagMap];
-  const awayFlag = countryFlagMap[match.awayTeam as keyof typeof countryFlagMap];
-  const ot = match.gameOddsTable;
+  const homeFlag = countryFlagMap[m.homeTeam as keyof typeof countryFlagMap];
+  const awayFlag = countryFlagMap[m.awayTeam as keyof typeof countryFlagMap];
+  const ot = m.gameOddsTable;
 
-  const groupedMarkets = match.marketOdds.reduce<Record<string, typeof match.marketOdds>>((acc, mo) => {
+  const groupedMarkets = m.marketOdds.reduce<Record<string, typeof m.marketOdds>>((acc, mo) => {
     if (!acc[mo.marketKey]) acc[mo.marketKey] = [];
     acc[mo.marketKey].push(mo);
     return acc;
@@ -125,7 +180,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
   const addedMarkets: AddedMarket[] = [];
 
-  for (const [tn, records] of Object.entries(groupByTypeName(match.h2hRecords))) {
+  for (const [tn, records] of Object.entries(groupByTypeName(m.h2hRecords))) {
     const r = records[0];
     addedMarkets.push({
       key: tn,
@@ -138,8 +193,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
     });
   }
 
-  if (match.bttsRecords.length > 0) {
-    const r = match.bttsRecords[0];
+  if (m.bttsRecords.length > 0) {
+    const r = m.bttsRecords[0];
     addedMarkets.push({
       key: 'btts',
       label: marketLabels.btts,
@@ -150,7 +205,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
     });
   }
 
-  for (const [tn, records] of Object.entries(groupByTypeName(match.totalsRecords))) {
+  for (const [tn, records] of Object.entries(groupByTypeName(m.totalsRecords))) {
     if (tn === 'alternate_totals') {
       addedMarkets.push({
         key: tn,
@@ -175,8 +230,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  if (match.doubleChanceRecords.length > 0) {
-    const r = match.doubleChanceRecords[0];
+  if (m.doubleChanceRecords.length > 0) {
+    const r = m.doubleChanceRecords[0];
     addedMarkets.push({
       key: 'double_chance',
       label: marketLabels.double_chance,
@@ -188,8 +243,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
     });
   }
 
-  if (match.noBetRecords.length > 0) {
-    const r = match.noBetRecords[0];
+  if (m.noBetRecords.length > 0) {
+    const r = m.noBetRecords[0];
     addedMarkets.push({
       key: 'draw_no_bet',
       label: marketLabels.draw_no_bet,
@@ -200,7 +255,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
     });
   }
 
-  for (const [tn, records] of Object.entries(groupByTypeName(match.spreadRecords))) {
+  for (const [tn, records] of Object.entries(groupByTypeName(m.spreadRecords))) {
     addedMarkets.push({
       key: tn,
       label: marketLabels[tn] || tn,
@@ -220,42 +275,58 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
           {homeFlag && <Image src={`/flags/${homeFlag}`} alt="" width={28} height={20} className="h-5 w-7 object-cover" />}
-          <span className="text-xl font-bold text-zinc-900">{match.homeTeam}</span>
+          <span className="text-xl font-bold text-zinc-900">{m.homeTeam}</span>
           <span className="text-sm text-zinc-400">v</span>
-          <span className="text-xl font-bold text-zinc-900">{match.awayTeam}</span>
+          <span className="text-xl font-bold text-zinc-900">{m.awayTeam}</span>
           {awayFlag && <Image src={`/flags/${awayFlag}`} alt="" width={28} height={20} className="h-5 w-7 object-cover" />}
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-zinc-500">Stage:</span>
-            <span className="ml-2 font-medium text-zinc-800">{match.stage}</span>
+            <span className="ml-2 font-medium text-zinc-800">{m.stage}</span>
           </div>
           <div>
             <span className="text-zinc-500">Date:</span>
-            <span className="ml-2 font-medium text-zinc-800">{formatDate(match.kickoffTime)}</span>
+            <span className="ml-2 font-medium text-zinc-800">{formatDate(m.kickoffTime)}</span>
           </div>
           <div>
             <span className="text-zinc-500">Status:</span>
-            <span className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-              match.status === 'UPCOMING' ? 'bg-blue-50 text-blue-700' :
-              match.status === 'LIVE' ? 'bg-green-50 text-green-700' :
-              match.status === 'FINISHED' ? 'bg-zinc-100 text-zinc-600' :
-              'bg-red-50 text-red-700'
-            }`}>
-              {match.status}
-            </span>
+              {(() => {
+              const isCompleted = m.homeScore !== null && m.awayScore !== null;
+              const past = new Date(m.kickoffTime) <= new Date();
+              const displayStatus = isCompleted ? 'FINISHED'
+                : past ? 'LIVE'
+                : 'UPCOMING';
+              const badgeClass = displayStatus === 'UPCOMING' ? 'bg-blue-50 text-blue-700'
+                : displayStatus === 'LIVE' ? 'bg-green-50 text-green-700'
+                : 'bg-zinc-100 text-zinc-600';
+              return (
+                <span className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                  {displayStatus}
+                </span>
+              );
+            })()}
           </div>
           <div>
             <span className="text-zinc-500">Total Bets:</span>
-            <span className="ml-2 font-medium text-zinc-800">{match._count.bets}</span>
+            <span className="ml-2 font-medium text-zinc-800">{m._count.bets}</span>
+          </div>
+          <div>
+            <span className="text-zinc-500">Score:</span>
+            <span className="ml-2 font-medium text-zinc-800">
+              {m.homeScore != null && m.awayScore != null
+                ? `${m.homeScore} — ${m.awayScore}`
+                : '—'}
+            </span>
+            <FetchScoreButton matchId={m.id} hasScore={m.homeScore != null && m.awayScore != null} />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-zinc-500">Add to Betting:</span>
-            <span className={`font-medium ${match.addToBetting ? 'text-green-600' : 'text-zinc-400'}`}>
-              {match.addToBetting ? 'Yes' : 'No'}
+            <span className={`font-medium ${m.addToBetting ? 'text-green-600' : 'text-zinc-400'}`}>
+              {m.addToBetting ? 'Yes' : 'No'}
             </span>
-            <ToggleBettingButton matchId={match.id} isInBetting={match.addToBetting} />
+            <ToggleBettingButton matchId={m.id} isInBetting={m.addToBetting} />
           </div>
         </div>
       </div>
@@ -283,10 +354,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       <div className="rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3">
           <h2 className="text-lg font-bold text-zinc-900">Market Odds</h2>
-          <FetchOddsButton matchId={match.id} hasExistingFile={hasExistingOddsFile} />
+          <FetchOddsButton matchId={m.id} hasExistingFile={hasExistingOddsFile} />
         </div>
         <MarketSections
-          matchId={match.id}
+          matchId={m.id}
           initialAddedMarkets={addedMarkets}
           fileMarketKeys={fileMarketKeys}
           firstOutcomes={firstOutcomes}
